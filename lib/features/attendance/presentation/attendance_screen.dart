@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/models/app_models.dart';
+import '../../../shared/services/attendance_service.dart';
+import '../../../shared/services/auth_service.dart';
+import '../../../shared/providers/notification_provider.dart';
 import '../../../shared/store/app_store.dart';
+import 'camera_face_view.dart';
 
 class AttendanceScreen extends StatefulWidget {
   const AttendanceScreen({super.key});
@@ -12,38 +16,146 @@ class AttendanceScreen extends StatefulWidget {
 
 class _AttendanceScreenState extends State<AttendanceScreen> {
   final _store = AppStore.instance;
+  final _cameraKey = GlobalKey<CameraFaceViewState>();
+
+  bool _processing = false;
 
   DateTime get _today =>
       DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
   AttendanceRecord? get _todayRecord => _store.attendanceOf(_today);
+  bool get _isCheckedIn => _todayRecord?.checkIn != null;
+  bool get _isCheckedOut => _todayRecord?.checkOut != null;
 
-  bool get _isCheckedIn =>
-      _todayRecord != null && _todayRecord!.checkIn != null;
+  // ── Face detection callbacks ──────────────────────────────────────────────
 
-  bool get _isCheckedOut =>
-      _todayRecord != null && _todayRecord!.checkOut != null;
+  Future<void> _onFaceDetected() async {
+    if (_processing || _isCheckedOut) return;
+    setState(() => _processing = true);
 
-  void _handleCheckIn() {
-    final now = TimeOfDay.now();
-    final existing = _todayRecord;
-    _store.setAttendance(AttendanceRecord(
-      id: existing?.id ?? _today.millisecondsSinceEpoch.toString(),
-      date: _today,
-      source: AttendanceSource.face,
-      status: AttendanceStatus.present,
-      checkIn: now,
-      checkOut: existing?.checkOut,
-    ));
-    setState(() {});
+    try {
+      final uid = AuthService.instance.currentUserId;
+      if (uid == null) return;
+
+      if (!_isCheckedIn) {
+        // First scan of the day → Check-in
+        final record = await AttendanceService.instance.checkIn(
+          uid,
+          source: AttendanceSource.face,
+        );
+        _store.setAttendance(record);
+        NotificationProvider.instance.refresh();
+        // Reset camera so user can later scan for check-out
+        _cameraKey.currentState?.resetToReady();
+        _showResult(
+          success: true,
+          message: 'Check-in berhasil pukul ${_fmtTod(record.checkIn!)}',
+        );
+      } else {
+        // Second scan → confirm check-out
+        final confirmed = await _confirmCheckOut();
+        if (!confirmed) {
+          // User cancelled — reset camera to ready
+          _cameraKey.currentState?.resetToReady();
+          return;
+        }
+        final record = await AttendanceService.instance.checkOut(uid);
+        _store.setAttendance(record);
+        NotificationProvider.instance.refresh();
+        // Mark camera done — no more scanning needed today
+        _cameraKey.currentState?.markDone();
+        _showResult(
+          success: true,
+          message: 'Check-out berhasil pukul ${_fmtTod(record.checkOut!)}',
+          color: AppColors.error,
+        );
+      }
+    } catch (e) {
+      _showResult(success: false, message: 'Gagal menyimpan presensi. Coba lagi.');
+      _cameraKey.currentState?.resetToReady();
+    } finally {
+      if (mounted) setState(() => _processing = false);
+    }
   }
 
-  void _handleCheckOut() {
-    final existing = _todayRecord;
-    if (existing == null) return;
-    _store.setAttendance(existing.copyWith(checkOut: TimeOfDay.now()));
-    setState(() {});
+  void _onTimeout() {
+    // CameraFaceView already shows timeout UI — nothing extra needed here.
   }
+
+  Future<bool> _confirmCheckOut() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text(
+          'Konfirmasi Check-Out',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        content: const Text(
+          'Wajah terdeteksi. Lanjutkan check-out sekarang?',
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Check-Out', style: TextStyle(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  void _showResult({
+    required bool success,
+    required String message,
+    Color? color,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: color ?? (success ? AppColors.success : AppColors.error),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        content: Row(
+          children: [
+            Icon(
+              success ? Icons.check_circle_rounded : Icons.error_rounded,
+              color: Colors.white,
+              size: 18,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Button action (manual trigger scan) ───────────────────────────────────
+
+  void _handleButtonTap() {
+    if (_isCheckedOut || _processing) return;
+    _cameraKey.currentState?.startScan();
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -74,7 +186,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-  // ─── APP BAR ─────────────────────────────────────────────────────────────
+  // ── App bar ───────────────────────────────────────────────────────────────
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
@@ -127,10 +239,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final (label, color, bg) = _statusStyle();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -138,11 +247,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           const SizedBox(width: 5),
           Text(
             label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color),
           ),
         ],
       ),
@@ -150,27 +255,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   (String, Color, Color) _statusStyle() {
-    if (_isCheckedOut) {
-      return ('Selesai', AppColors.success, AppColors.successLight);
-    }
-    if (_isCheckedIn) {
-      return ('Sudah Check-In', AppColors.warning, AppColors.warningLight);
-    }
+    if (_isCheckedOut) return ('Selesai', AppColors.success, AppColors.successLight);
+    if (_isCheckedIn) return ('Sudah Check-In', AppColors.warning, AppColors.warningLight);
     return ('Belum Hadir', AppColors.missing, AppColors.missingLight);
   }
 
-  // ─── STATUS SUMMARY ──────────────────────────────────────────────────────
+  // ── Status summary ────────────────────────────────────────────────────────
 
   Widget _buildStatusSummary() {
     final record = _todayRecord;
     final cin = record?.checkIn;
     final cout = record?.checkOut;
-
     final cinText = cin != null ? _fmtTod(cin) : '--:--';
     final coutText = cout != null ? _fmtTod(cout) : '--:--';
-    final duration = (cin != null && cout != null)
-        ? _duration(cin, cout)
-        : '--j --m';
+    final duration = (cin != null && cout != null) ? _duration(cin, cout) : '--j --m';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -188,9 +286,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               iconBg: cin != null ? AppColors.successLight : AppColors.background,
               label: 'Check-in',
               value: cinText,
-              valueColor: cin != null
-                  ? AppColors.textPrimary
-                  : AppColors.textSecondary,
+              valueColor: cin != null ? AppColors.textPrimary : AppColors.textSecondary,
             ),
           ),
           _verticalDivider(),
@@ -201,9 +297,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               iconBg: cout != null ? AppColors.errorLight : AppColors.background,
               label: 'Check-out',
               value: coutText,
-              valueColor: cout != null
-                  ? AppColors.textPrimary
-                  : AppColors.textSecondary,
+              valueColor: cout != null ? AppColors.textPrimary : AppColors.textSecondary,
             ),
           ),
           _verticalDivider(),
@@ -235,20 +329,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       children: [
         Container(
           padding: const EdgeInsets.all(7),
-          decoration: BoxDecoration(
-            color: iconBg,
-            borderRadius: BorderRadius.circular(8),
-          ),
+          decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(8)),
           child: Icon(icon, size: 16, color: iconColor),
         ),
         const SizedBox(height: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            color: AppColors.textSecondary,
-          ),
-        ),
+        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
         const SizedBox(height: 2),
         Text(
           value,
@@ -264,13 +349,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Widget _verticalDivider() => Container(
-        width: 1,
-        height: 42,
-        color: AppColors.border,
-        margin: const EdgeInsets.symmetric(horizontal: 4),
-      );
+    width: 1,
+    height: 42,
+    color: AppColors.border,
+    margin: const EdgeInsets.symmetric(horizontal: 4),
+  );
 
-  // ─── CAMERA AREA ─────────────────────────────────────────────────────────
+  // ── Camera area ───────────────────────────────────────────────────────────
 
   Widget _buildCameraArea() {
     return Container(
@@ -298,11 +383,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 ),
               ),
               const SizedBox(width: 10),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'Verifikasi Wajah',
                       style: TextStyle(
                         fontSize: 13,
@@ -310,119 +395,30 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    SizedBox(height: 1),
+                    const SizedBox(height: 1),
                     Text(
-                      'Posisikan wajah di dalam area oval',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
-                      ),
+                      _cameraSubtitle(),
+                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                     ),
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
+              if (_processing)
+                const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
                 ),
-                decoration: BoxDecoration(
-                  color: AppColors.successLight,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: AppColors.success,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 5),
-                    const Text(
-                      'Siap',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.success,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // Oval face frame
-                  CustomPaint(
-                    size: const Size(double.infinity, double.infinity),
-                    painter: _OvalFramePainter(),
-                  ),
-                  // Face silhouette icon
-                  Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryLight,
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: const Icon(
-                      Icons.person_rounded,
-                      size: 72,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  // Bottom instruction chip
-                  Positioned(
-                    bottom: 14,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.info_outline_rounded,
-                            size: 13,
-                            color: AppColors.primary,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            _cameraHint(),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            child: CameraFaceView(
+              key: _cameraKey,
+              active: !_isCheckedOut,
+              hint: _cameraHint(),
+              onFaceDetected: _onFaceDetected,
+              onTimeout: _onTimeout,
             ),
           ),
         ],
@@ -432,11 +428,17 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   String _cameraHint() {
     if (_isCheckedOut) return 'Presensi hari ini sudah selesai';
-    if (_isCheckedIn) return 'Tap untuk memulai check-out';
-    return 'Arahkan wajah ke kamera';
+    if (_isCheckedIn) return 'Tap tombol untuk mulai scan check-out';
+    return 'Tap tombol untuk mulai scan check-in';
   }
 
-  // ─── SUPPORTING INFO ─────────────────────────────────────────────────────
+  String _cameraSubtitle() {
+    if (_isCheckedOut) return 'Presensi hari ini sudah selesai';
+    if (_isCheckedIn) return 'Siap check-out — scan wajah untuk konfirmasi';
+    return 'Posisikan wajah di dalam area oval';
+  }
+
+  // ── Supporting info ───────────────────────────────────────────────────────
 
   Widget _buildSupportingInfo() {
     return Container(
@@ -468,11 +470,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
-  Widget _infoItem({
-    required IconData icon,
-    required String label,
-    required String value,
-  }) {
+  Widget _infoItem({required IconData icon, required String label, required String value}) {
     return Row(
       children: [
         Icon(icon, size: 16, color: AppColors.primary),
@@ -481,21 +479,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: AppColors.textSecondary,
-                ),
-              ),
+              Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
               const SizedBox(height: 1),
               Text(
                 value,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -507,35 +495,35 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Widget _infoDivider() => Container(
-        width: 1,
-        height: 28,
-        color: AppColors.border,
-        margin: const EdgeInsets.symmetric(horizontal: 8),
-      );
+    width: 1,
+    height: 28,
+    color: AppColors.border,
+    margin: const EdgeInsets.symmetric(horizontal: 8),
+  );
 
-  // ─── ACTION BUTTON ───────────────────────────────────────────────────────
+  // ── Action button ─────────────────────────────────────────────────────────
 
   Widget _buildActionButton() {
-    VoidCallback? onPressed;
-    IconData icon;
-    String label;
-    Color bg;
+    final IconData icon;
+    final String label;
+    final Color bg;
+    final VoidCallback? onPressed;
 
     if (_isCheckedOut) {
-      onPressed = null;
       icon = Icons.check_circle_rounded;
       label = 'Presensi Selesai';
       bg = AppColors.success;
+      onPressed = null;
     } else if (_isCheckedIn) {
-      onPressed = _handleCheckOut;
       icon = Icons.logout_rounded;
-      label = 'Check-Out Sekarang';
+      label = _processing ? 'Memproses…' : 'Scan Wajah untuk Check-Out';
       bg = AppColors.error;
+      onPressed = _processing ? null : _handleButtonTap;
     } else {
-      onPressed = _handleCheckIn;
-      icon = Icons.login_rounded;
-      label = 'Check-In Sekarang';
+      icon = Icons.face_retouching_natural_rounded;
+      label = _processing ? 'Memproses…' : 'Scan Wajah untuk Check-In';
       bg = AppColors.primary;
+      onPressed = _processing ? null : _handleButtonTap;
     }
 
     return SizedBox(
@@ -544,25 +532,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       child: ElevatedButton.icon(
         onPressed: onPressed,
         icon: Icon(icon, size: 20),
-        label: Text(
-          label,
-          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-        ),
+        label: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
         style: ElevatedButton.styleFrom(
           backgroundColor: bg,
           foregroundColor: Colors.white,
           disabledBackgroundColor: AppColors.successLight,
           disabledForegroundColor: AppColors.success,
           elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
   }
 
-  // ─── HELPERS ─────────────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────────
 
   String _fmtTod(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
@@ -577,122 +560,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   String _todayLabel() {
     final now = DateTime.now();
     const months = [
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember',
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
     ];
-    const days = [
-      'Senin',
-      'Selasa',
-      'Rabu',
-      'Kamis',
-      'Jumat',
-      'Sabtu',
-      'Minggu',
-    ];
+    const days = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
     return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
   }
 }
 
-class _OvalFramePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromCenter(
-      center: Offset(size.width / 2, size.height / 2),
-      width: size.width * 0.62,
-      height: size.height * 0.78,
-    );
-
-    // Dashed oval outline
-    final paint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.35)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
-    _drawDashedOval(canvas, rect, paint);
-
-    // Corner brackets around the oval
-    final bracketPaint = Paint()
-      ..color = AppColors.primary
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    const double len = 18;
-    final outer = rect.inflate(8);
-
-    // Top-left
-    canvas.drawLine(
-      Offset(outer.left, outer.top + len),
-      Offset(outer.left, outer.top),
-      bracketPaint,
-    );
-    canvas.drawLine(
-      Offset(outer.left, outer.top),
-      Offset(outer.left + len, outer.top),
-      bracketPaint,
-    );
-
-    // Top-right
-    canvas.drawLine(
-      Offset(outer.right - len, outer.top),
-      Offset(outer.right, outer.top),
-      bracketPaint,
-    );
-    canvas.drawLine(
-      Offset(outer.right, outer.top),
-      Offset(outer.right, outer.top + len),
-      bracketPaint,
-    );
-
-    // Bottom-left
-    canvas.drawLine(
-      Offset(outer.left, outer.bottom - len),
-      Offset(outer.left, outer.bottom),
-      bracketPaint,
-    );
-    canvas.drawLine(
-      Offset(outer.left, outer.bottom),
-      Offset(outer.left + len, outer.bottom),
-      bracketPaint,
-    );
-
-    // Bottom-right
-    canvas.drawLine(
-      Offset(outer.right - len, outer.bottom),
-      Offset(outer.right, outer.bottom),
-      bracketPaint,
-    );
-    canvas.drawLine(
-      Offset(outer.right, outer.bottom),
-      Offset(outer.right, outer.bottom - len),
-      bracketPaint,
-    );
-  }
-
-  void _drawDashedOval(Canvas canvas, Rect rect, Paint paint) {
-    final path = Path()..addOval(rect);
-    const dashLen = 6.0;
-    const gapLen = 5.0;
-    for (final metric in path.computeMetrics()) {
-      var dist = 0.0;
-      while (dist < metric.length) {
-        final extract = metric.extractPath(dist, dist + dashLen);
-        canvas.drawPath(extract, paint);
-        dist += dashLen + gapLen;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}

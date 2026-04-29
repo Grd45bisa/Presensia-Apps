@@ -1340,8 +1340,11 @@ class _CalendarScreenState extends State<CalendarScreen>
                 entry,
                 uid,
               );
-              _store.addWorklog(saved);
+              // Pop first, then update store to avoid _dependents assertion
               if (ctx.mounted) Navigator.pop(ctx);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _store.addWorklog(saved);
+              });
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -1404,7 +1407,9 @@ class _CalendarScreenState extends State<CalendarScreen>
                 subtitle: 'Cuti tahunan, izin pribadi, dll.',
                 onTap: () {
                   Navigator.pop(ctx);
-                  _markAttendance(date, AttendanceStatus.leave);
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _markAttendance(date, AttendanceStatus.leave);
+                  });
                 },
               ),
               const SizedBox(height: 8),
@@ -1413,7 +1418,9 @@ class _CalendarScreenState extends State<CalendarScreen>
                 subtitle: 'Sakit dengan/tanpa surat dokter.',
                 onTap: () {
                   Navigator.pop(ctx);
-                  _markAttendance(date, AttendanceStatus.sick);
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _markAttendance(date, AttendanceStatus.sick);
+                  });
                 },
               ),
               const SizedBox(height: 8),
@@ -1422,7 +1429,9 @@ class _CalendarScreenState extends State<CalendarScreen>
                 subtitle: 'Libur nasional / event perusahaan.',
                 onTap: () {
                   Navigator.pop(ctx);
-                  _markAttendance(date, AttendanceStatus.holiday);
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _markAttendance(date, AttendanceStatus.holiday);
+                  });
                 },
               ),
               const SizedBox(height: 12),
@@ -1741,17 +1750,25 @@ class _CalendarScreenState extends State<CalendarScreen>
                     height: 48,
                     child: ElevatedButton(
                       onPressed: () {
-                        _markAttendance(
-                          date,
-                          status,
-                          checkIn: needsTime ? checkIn : null,
-                          checkOut: needsTime ? checkOut : null,
-                          note: notesCtrl.text.trim().isEmpty
-                              ? null
-                              : notesCtrl.text.trim(),
-                          existing: existing,
-                        );
                         Navigator.pop(ctx);
+                        final capturedDate = date;
+                        final capturedStatus = status;
+                        final capturedCheckIn = needsTime ? checkIn : null;
+                        final capturedCheckOut = needsTime ? checkOut : null;
+                        final capturedNote = notesCtrl.text.trim().isEmpty
+                            ? null
+                            : notesCtrl.text.trim();
+                        final capturedExisting = existing;
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _markAttendance(
+                            capturedDate,
+                            capturedStatus,
+                            checkIn: capturedCheckIn,
+                            checkOut: capturedCheckOut,
+                            note: capturedNote,
+                            existing: capturedExisting,
+                          );
+                        });
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
@@ -2057,17 +2074,25 @@ class _CalendarScreenState extends State<CalendarScreen>
                       );
 
                       try {
+                        ReminderEvent saved;
                         if (existing != null) {
-                          final updated = await ReminderService.instance
+                          saved = await ReminderService.instance
                               .upsertReminder(event, uid);
-                          _store.updateReminder(updated);
                         } else {
-                          final saved = await ReminderService.instance
+                          saved = await ReminderService.instance
                               .upsertReminder(event, uid);
-                          _store.addReminder(saved);
                         }
-                        NotificationService.instance.scheduleReminder(event);
+                        // Pop first, then update store to avoid _dependents assertion
                         if (ctx.mounted) Navigator.pop(ctx);
+                        NotificationService.instance.scheduleReminder(saved);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (existing != null) {
+                            _store.updateReminder(saved);
+                          } else {
+                            _store.addReminder(saved);
+                          }
+                          NotificationProvider.instance.refresh();
+                        });
                       } catch (_) {
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import '../models/app_notification.dart';
 import '../store/app_store.dart';
 import '../theme/app_colors.dart';
@@ -8,6 +9,19 @@ import '../theme/app_colors.dart';
 class NotificationProvider extends ChangeNotifier {
   static final NotificationProvider instance = NotificationProvider._();
   NotificationProvider._();
+
+  @override
+  void notifyListeners() {
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks ||
+        phase == SchedulerPhase.transientCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        super.notifyListeners();
+      });
+    } else {
+      super.notifyListeners();
+    }
+  }
 
   final Map<String, bool> _readState = {};
 

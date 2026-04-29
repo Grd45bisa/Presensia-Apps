@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../../shared/services/auth_service.dart';
+import '../../../shared/services/realtime_sync_service.dart';
+import '../../../shared/store/app_store.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../main_nav/main_screen.dart';
 import '../controller/auth_controller.dart';
 import 'forgot_password_screen.dart';
 import 'widgets/auth_widgets.dart';
@@ -27,13 +31,30 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    if (_controller.isLoading) return;
     FocusScope.of(context).unfocus();
     if (!_formKey.currentState!.validate()) return;
-    await _controller.signIn(
+
+    final ok = await _controller.signIn(
       email: _emailCtrl.text.trim(),
       password: _passCtrl.text,
     );
-    // AuthGate di main.dart mendengar auth state change dan navigasi otomatis
+
+    if (!ok || !mounted) return;
+
+    final uid = AuthService.instance.currentUserId;
+    AppStore.instance.loadFromCloud();
+    if (uid != null) RealtimeSyncService.instance.subscribe(uid);
+
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (_, _, _) => const MainScreen(),
+        transitionsBuilder: (_, anim, _, child) =>
+            FadeTransition(opacity: anim, child: child),
+        transitionDuration: const Duration(milliseconds: 300),
+      ),
+    );
   }
 
   void _goForgotPassword() {

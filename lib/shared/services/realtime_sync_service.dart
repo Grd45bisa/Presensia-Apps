@@ -1,3 +1,4 @@
+import 'package:flutter/scheduler.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/app_models.dart';
 import '../providers/notification_provider.dart';
@@ -209,13 +210,19 @@ class RealtimeSyncService {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
+  void _scheduleOnUiThread(VoidCallback fn) {
+    SchedulerBinding.instance.addPostFrameCallback((_) => fn());
+  }
+
   void _onAttendanceChange(PostgresChangePayload payload) {
     try {
       final record = AttendanceRecord.fromJson(
         Map<String, dynamic>.from(payload.newRecord),
       );
-      AppStore.instance.setAttendance(record);
-      NotificationProvider.instance.refresh();
+      _scheduleOnUiThread(() {
+        AppStore.instance.setAttendance(record);
+        NotificationProvider.instance.refresh();
+      });
     } catch (_) {}
   }
 
@@ -225,8 +232,10 @@ class RealtimeSyncService {
       final dateStr = old['date'] as String?;
       if (dateStr == null) return;
       final date = DateTime.parse(dateStr);
-      AppStore.instance.removeAttendance(date);
-      NotificationProvider.instance.refresh();
+      _scheduleOnUiThread(() {
+        AppStore.instance.removeAttendance(date);
+        NotificationProvider.instance.refresh();
+      });
     } catch (_) {}
   }
 
@@ -235,8 +244,10 @@ class RealtimeSyncService {
       final entry = WorklogEntry.fromJson(
         Map<String, dynamic>.from(payload.newRecord),
       );
-      AppStore.instance.upsertWorklog(entry);
-      NotificationProvider.instance.refresh();
+      _scheduleOnUiThread(() {
+        AppStore.instance.upsertWorklog(entry);
+        NotificationProvider.instance.refresh();
+      });
     } catch (_) {}
   }
 
@@ -244,8 +255,10 @@ class RealtimeSyncService {
     try {
       final id = payload.oldRecord['id'] as String?;
       if (id == null) return;
-      AppStore.instance.removeWorklog(id);
-      NotificationProvider.instance.refresh();
+      _scheduleOnUiThread(() {
+        AppStore.instance.removeWorklog(id);
+        NotificationProvider.instance.refresh();
+      });
     } catch (_) {}
   }
 
@@ -254,16 +267,17 @@ class RealtimeSyncService {
       final event = ReminderEvent.fromJson(
         Map<String, dynamic>.from(payload.newRecord),
       );
-      // updateReminder only patches if already exists; addReminder if new
-      final existing = AppStore.instance
-          .remindersOf(event.startDateTime)
-          .any((r) => r.id == event.id);
-      if (existing) {
-        AppStore.instance.updateReminder(event);
-      } else {
-        AppStore.instance.addReminder(event);
-      }
-      NotificationProvider.instance.refresh();
+      _scheduleOnUiThread(() {
+        final existing = AppStore.instance
+            .remindersOf(event.startDateTime)
+            .any((r) => r.id == event.id);
+        if (existing) {
+          AppStore.instance.updateReminder(event);
+        } else {
+          AppStore.instance.addReminder(event);
+        }
+        NotificationProvider.instance.refresh();
+      });
     } catch (_) {}
   }
 
@@ -274,12 +288,14 @@ class RealtimeSyncService {
       final startStr = old['start_datetime'] as String?;
       if (id == null || startStr == null) return;
       final startDt = DateTime.parse(startStr).toLocal();
-      final reminders = AppStore.instance.remindersOf(startDt);
-      final match = reminders.where((r) => r.id == id).firstOrNull;
-      if (match != null) {
-        AppStore.instance.removeReminder(match);
-        NotificationProvider.instance.refresh();
-      }
+      _scheduleOnUiThread(() {
+        final reminders = AppStore.instance.remindersOf(startDt);
+        final match = reminders.where((r) => r.id == id).firstOrNull;
+        if (match != null) {
+          AppStore.instance.removeReminder(match);
+          NotificationProvider.instance.refresh();
+        }
+      });
     } catch (_) {}
   }
 
@@ -288,9 +304,10 @@ class RealtimeSyncService {
       final settings = WorkScheduleSettings.fromJson(
         Map<String, dynamic>.from(payload.newRecord),
       );
-      // Update without re-persisting (it came from DB already)
-      AppStore.instance.applyRemoteSettings(settings);
-      NotificationProvider.instance.refresh();
+      _scheduleOnUiThread(() {
+        AppStore.instance.applyRemoteSettings(settings);
+        NotificationProvider.instance.refresh();
+      });
     } catch (_) {}
   }
 
@@ -299,13 +316,15 @@ class RealtimeSyncService {
       final profile = EmployeeProfile.fromJson(
         Map<String, dynamic>.from(payload.newRecord),
       );
-      AppStore.instance.setProfile(profile);
+      _scheduleOnUiThread(() {
+        AppStore.instance.setProfile(profile);
+      });
     } catch (_) {}
   }
 
   void _onProjectsChanged() {
-    // Projects list changed — trigger a lightweight notifyListeners so any
-    // screen that shows project data knows to reload from the store.
-    AppStore.instance.notifyProjectsChanged();
+    _scheduleOnUiThread(() {
+      AppStore.instance.notifyProjectsChanged();
+    });
   }
 }

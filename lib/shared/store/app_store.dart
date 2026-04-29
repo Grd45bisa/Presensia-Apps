@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import '../models/app_models.dart';
 import '../services/attendance_service.dart';
 import '../services/worklog_service.dart';
@@ -10,6 +11,21 @@ import '../services/auth_service.dart';
 class AppStore extends ChangeNotifier {
   static final AppStore instance = AppStore._();
   AppStore._();
+
+  @override
+  void notifyListeners() {
+    // If called during a frame (build/layout/paint), defer to next frame.
+    // This prevents the _dependents.isEmpty assertion crash.
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks ||
+        phase == SchedulerPhase.transientCallbacks) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        super.notifyListeners();
+      });
+    } else {
+      super.notifyListeners();
+    }
+  }
 
   // ─── PROFILE ──────────────────────────────────────────────────────────────
 
