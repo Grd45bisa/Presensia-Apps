@@ -6,6 +6,7 @@ import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/face/face_recognition_service.dart';
+import '../../../shared/services/screen_brightness_service.dart';
 import '../../../shared/services/face/face_quality_filter.dart';
 import '../../../shared/services/face/embedding_sync_service.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -47,6 +48,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    ScreenBrightnessService.instance.setMax();
     _initCamera();
     FaceRecognitionService.instance.init();
   }
@@ -100,6 +102,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
     _detector.close();
     _camCtrl?.dispose();
     FaceRecognitionService.instance.dispose();
+    ScreenBrightnessService.instance.restore();
     super.dispose();
   }
 
@@ -516,29 +519,6 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
               ),
             ),
             CustomPaint(painter: _EnrollOverlayPainter()),
-            // Indikator brightness dipaksa tinggi
-            Positioned(
-              top: 12,
-              right: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.brightness_high_rounded, size: 13, color: Colors.amber),
-                    SizedBox(width: 4),
-                    Text(
-                      'Kecerahan penuh',
-                      style: TextStyle(fontSize: 10, color: Colors.white70),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),

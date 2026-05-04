@@ -9,6 +9,7 @@
 #include <app_links/app_links_plugin_c_api.h>
 #include <connectivity_plus/connectivity_plus_windows_plugin.h>
 #include <printing/printing_plugin.h>
+#include <screen_brightness_windows/screen_brightness_windows_plugin.h>
 #include <url_launcher_windows/url_launcher_windows.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
@@ -18,6 +19,8 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("ConnectivityPlusWindowsPlugin"));
   PrintingPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("PrintingPlugin"));
+  ScreenBrightnessWindowsPluginRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("ScreenBrightnessWindowsPlugin"));
   UrlLauncherWindowsRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("UrlLauncherWindows"));
 }

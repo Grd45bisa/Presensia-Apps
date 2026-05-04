@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
 import '../../../shared/services/face/face_quality_filter.dart';
+import '../../../shared/services/screen_brightness_service.dart';
 import '../../../shared/theme/app_colors.dart';
 
 enum CameraFaceState { loading, ready, scanning, detected, timeout, error, done }
@@ -132,10 +133,10 @@ class CameraFaceViewState extends State<CameraFaceView>
     if (ctrl != null) {
       try {
         await ctrl.dispose();
-      } catch (_) {
-        // Ignore disposal races.
-      }
+      } catch (_) {}
     }
+    // Kembalikan kecerahan layar ke nilai semula saat kamera dilepas.
+    await ScreenBrightnessService.instance.restore();
     if (!mounted || _disposed) return;
     setState(() {
       _state = CameraFaceState.ready;
@@ -188,15 +189,14 @@ class CameraFaceViewState extends State<CameraFaceView>
 
       _controller = ctrl;
 
-      // Paksa brightness kamera ke maksimum agar wajah tetap terlihat
-      // jelas meskipun di ruangan gelap. Expose offset dipasang sekali
-      // saat init dan tidak diubah lagi kecuali di-release.
+      // Paksa exposure kamera ke maksimum
       try {
         final maxExp = await ctrl.getMaxExposureOffset();
         await ctrl.setExposureOffset(maxExp.clamp(0.0, 2.0));
-      } catch (_) {
-        // Tidak semua device mendukung manual exposure — abaikan.
-      }
+      } catch (_) {}
+
+      // Paksa kecerahan layar ke 100% agar wajah terlihat jelas
+      await ScreenBrightnessService.instance.setMax();
 
       setState(() => _state = CameraFaceState.ready);
     } catch (e) {
@@ -521,6 +521,7 @@ class CameraFaceViewState extends State<CameraFaceView>
     WidgetsBinding.instance.removeObserver(this);
     _faceDetector.close();
     _controller?.dispose();
+    unawaited(ScreenBrightnessService.instance.restore());
     super.dispose();
   }
 
@@ -704,29 +705,6 @@ class CameraFaceViewState extends State<CameraFaceView>
               ),
             ),
             CustomPaint(painter: _FaceOverlayPainter(scanning: isScanning)),
-            // Indikator brightness dipaksa tinggi
-            Positioned(
-              top: 14,
-              right: 14,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.brightness_high_rounded, size: 13, color: Colors.amber),
-                    SizedBox(width: 4),
-                    Text(
-                      'Kecerahan penuh',
-                      style: TextStyle(fontSize: 10, color: Colors.white70),
-                    ),
-                  ],
-                ),
-              ),
-            ),
             if (isScanning)
               Positioned(
                 top: 14,

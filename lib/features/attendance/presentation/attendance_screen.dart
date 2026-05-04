@@ -695,14 +695,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: CameraFaceView(
-              key: _cameraKey,
-              // Aktif hanya jika tab ini sedang dipilih DAN belum check-out.
-              active: widget.isActive && !_isCheckedOut,
-              hint: _cameraHint(),
-              onFaceDetected: _onFaceDetected,
-              onTimeout: _onTimeout,
-            ),
+            child: _isCheckedOut
+                ? _buildCompletedAttendanceView()
+                : CameraFaceView(
+                    key: _cameraKey,
+                    active: widget.isActive,
+                    hint: _cameraHint(),
+                    onFaceDetected: _onFaceDetected,
+                    onTimeout: _onTimeout,
+                  ),
           ),
         ],
       ),
@@ -722,6 +723,106 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   // ── Supporting info ───────────────────────────────────────────────────────
+
+  Widget _buildCompletedAttendanceView() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.successLight,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 68,
+              height: 68,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: AppColors.success.withValues(alpha: 0.16),
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x120F172A),
+                    blurRadius: 16,
+                    offset: Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.check_circle_rounded,
+                size: 36,
+                color: AppColors.success,
+              ),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              _completedAttendanceHeadline(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _completedAttendanceMessage(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.45,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Text(
+                _completedAttendanceFooter(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.success,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _completedAttendanceHeadline() {
+    final hour = DateTime.now().hour;
+    if (hour >= 17) return 'Sampai ketemu esok hari';
+    if (hour >= 12) return 'Presensi hari ini sudah lengkap';
+    return 'Presensi selesai dengan baik';
+  }
+
+  String _completedAttendanceMessage() {
+    final checkIn = _todayRecord?.checkIn;
+    final checkOut = _todayRecord?.checkOut;
+    final checkInText = checkIn != null ? _fmtTod(checkIn) : '--:--';
+    final checkOutText = checkOut != null ? _fmtTod(checkOut) : '--:--';
+    return 'Check-in tercatat pukul $checkInText dan check-out pukul '
+        '$checkOutText. Semua proses verifikasi wajah untuk hari ini sudah selesai.';
+  }
+
+  String _completedAttendanceFooter() {
+    final hour = DateTime.now().hour;
+    if (hour >= 17) return 'Terima kasih, selamat beristirahat';
+    if (hour >= 12) return 'Terima kasih, semoga harimu lancar';
+    return 'Terima kasih, sampai jumpa lagi';
+  }
 
   Widget _buildSupportingInfo() {
     return Container(
