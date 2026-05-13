@@ -157,6 +157,12 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
         _showSnack('Wajah tidak terdeteksi. Coba lagi.');
         return;
       }
+      if (faces.length > 1) {
+        _showSnack(
+          'Terdeteksi lebih dari satu wajah. Pastikan hanya pemilik akun di kamera.',
+        );
+        return;
+      }
 
       final embedding = await FaceRecognitionService.instance.extractEmbedding(
         fullImage,
@@ -343,8 +349,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
                   color: done
                       ? AppColors.success
                       : active
-                          ? AppColors.primary
-                          : AppColors.border,
+                      ? AppColors.primary
+                      : AppColors.border,
                   borderRadius: BorderRadius.circular(3),
                 ),
               ),
@@ -359,7 +365,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 
   Widget _buildInstruction() {
     final pose = _poses[_currentPoseIndex];
-    final poseLabel = 'Pose ${_currentPoseIndex + 1} / ${_poses.length} – ${pose.label}';
+    final poseLabel =
+        'Pose ${_currentPoseIndex + 1} / ${_poses.length} – ${pose.label}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -465,8 +472,8 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
     final buttonLabel = _capturing
         ? 'Mengambil sampel…'
         : isLast
-            ? 'Ambil & Simpan'
-            : 'Ambil Foto (${_currentPoseIndex + 1}/${_poses.length})';
+        ? 'Ambil & Simpan'
+        : 'Ambil Foto (${_currentPoseIndex + 1}/${_poses.length})';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -557,7 +564,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
             Text(
               '${_poses.length} pose wajah telah disimpan dengan aman.\n'
               'Anda sekarang dapat menggunakan absensi wajah.',
-              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),

@@ -38,6 +38,7 @@ class LiveFaceDetectionResult {
   final int rawHeight;
   final InputImageRotation? rotation;
   final Face? face;
+  final String? rejectReason;
 
   const LiveFaceDetectionResult({
     required this.status,
@@ -49,6 +50,7 @@ class LiveFaceDetectionResult {
     this.rawHeight = 0,
     this.rotation,
     this.face,
+    this.rejectReason,
   });
 }
 
@@ -122,6 +124,7 @@ class CameraFaceViewState extends State<CameraFaceView>
   bool _livenessPassed = false;
 
   static const int _timeoutSec = 10;
+  static const bool _livenessEnabled = true;
 
   // Live mode — throttle face detection agar tidak overload CPU.
   // 300ms memberi inference cukup waktu selesai sebelum frame berikutnya.
@@ -372,8 +375,9 @@ class CameraFaceViewState extends State<CameraFaceView>
       if (!quality.accepted) {
         widget.onLiveFaceDetection?.call(
           LiveFaceDetectionResult(
-            status: LiveFaceDetectionStatus.detecting,
+            status: LiveFaceDetectionStatus.rejected,
             face: face,
+            rejectReason: quality.rejectReason,
           ),
         );
         return;
@@ -409,6 +413,7 @@ class CameraFaceViewState extends State<CameraFaceView>
     _scanning = true;
     _processingFrame = false;
     _countdown = _timeoutSec;
+    _resetLiveness();
     setState(() => _state = CameraFaceState.scanning);
 
     _timeoutTimer?.cancel();
@@ -485,6 +490,18 @@ class CameraFaceViewState extends State<CameraFaceView>
         }
       }
 
+      final quality = FaceQualityFilter.evaluateFast(
+        face,
+        image.width,
+        image.height,
+      );
+      if (!quality.accepted) return;
+
+      if (_livenessEnabled && !_livenessPassed) {
+        if (mounted) setState(() {});
+        return;
+      }
+
       final fullImage = _cameraImageToImage(image, rotation);
       if (fullImage == null) return;
       final best = _SampledFrame(
@@ -497,31 +514,8 @@ class CameraFaceViewState extends State<CameraFaceView>
         rawHeight: image.height,
         rotation: rotation,
         face: face,
-        qualityScore: 1,
+        qualityScore: quality.score,
       );
-
-      // Require liveness for face acceptance in scan mode
-      if (!_livenessPassed) {
-        // Liveness not passed yet - continue scanning
-        _scanning = false;
-        _timeoutTimer?.cancel();
-        _timeoutTimer = null;
-        unawaited(_stopScan());
-
-        if (mounted) {
-          setState(() => _state = CameraFaceState.ready);
-          // Show feedback to user
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Liveness tidak terdeteksi. Kedipkan mata 2x untuk verifikasi.'),
-              backgroundColor: AppColors.warning,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          );
-        }
-        return;
-      }
 
       _scanning = false;
       _timeoutTimer?.cancel();
@@ -699,6 +693,20 @@ class CameraFaceViewState extends State<CameraFaceView>
     _livenessPassed = false;
   }
 
+  String _timeoutTitle() {
+    if (_livenessEnabled && _visibleFaces.isNotEmpty && !_livenessPassed) {
+      return 'Liveness belum terdeteksi';
+    }
+    return 'Wajah tidak terdeteksi';
+  }
+
+  String _timeoutMessage() {
+    if (_livenessEnabled && _visibleFaces.isNotEmpty && !_livenessPassed) {
+      return 'Kedipkan mata 2x saat kamera memindai\nlalu coba lagi';
+    }
+    return 'Pastikan wajah terlihat jelas\nlalu coba lagi';
+  }
+
   void _onTimeout() {
     unawaited(_stopScan());
     if (!mounted) return;
@@ -713,6 +721,7 @@ class CameraFaceViewState extends State<CameraFaceView>
       _state = CameraFaceState.ready;
       _countdown = _timeoutSec;
     });
+    _resetLiveness();
     _updateVisibleFaces(const [], null, null);
     // Live mode: restart stream setelah reset.
     if (widget.liveMode) unawaited(_startLiveStream());
@@ -845,19 +854,22 @@ class CameraFaceViewState extends State<CameraFaceView>
                 ),
               ),
               const SizedBox(height: 14),
-              const Text(
-                'Wajah tidak terdeteksi',
-                style: TextStyle(
+              Text(
+                _timeoutTitle(),
+                style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
-                'Pastikan wajah terlihat jelas\nlalu coba lagi',
+              Text(
+                _timeoutMessage(),
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: 16),
               TextButton(
@@ -1000,7 +1012,9 @@ class CameraFaceViewState extends State<CameraFaceView>
                                   ? Icons.search_rounded
                                   : Icons.info_outline_rounded),
                         size: 13,
-                        color: _livenessPassed ? AppColors.success : Colors.white70,
+                        color: _livenessPassed
+                            ? AppColors.success
+                            : Colors.white70,
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -1013,11 +1027,17 @@ class CameraFaceViewState extends State<CameraFaceView>
                             : (isDetected
                                   ? 'Mencocokkan wajah...'
                                   : (isScanning
-                                        ? 'Mendeteksi wajah...'
+                                        ? (_livenessPassed
+                                              ? 'Liveness OK'
+                                              : (_blinkCount == 0
+                                                    ? 'Kedipkan mata 2x'
+                                                    : 'Kedipan: $_blinkCount / 2'))
                                         : widget.hint)),
                         style: TextStyle(
                           fontSize: 11,
-                          color: _livenessPassed ? AppColors.success : Colors.white,
+                          color: _livenessPassed
+                              ? AppColors.success
+                              : Colors.white,
                           fontWeight: FontWeight.w600,
                         ),
                       ),

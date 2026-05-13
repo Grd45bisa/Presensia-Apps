@@ -31,7 +31,7 @@ class QualityFilterException implements Exception {
 }
 
 /// SFace pipeline:
-///   Camera frame → MLKit detection → alignment → crop 112×112 → TFLite → embedding 128-dim L2-normalized
+///   Camera frame → MLKit detection → alignment → crop 112×112 → TFLite → L2-normalized embedding
 ///   Matching: cosine similarity (primary) + euclidean distance (debug)
 class FaceRecognitionService {
   static final FaceRecognitionService instance = FaceRecognitionService._();
@@ -41,24 +41,45 @@ class FaceRecognitionService {
   bool _initialized = false;
 
   // Cosine similarity threshold for L2-normalized SFace embeddings.
-  // 0.70 is a balanced starting point for SFace identity matching.
-  static const double _cosineThreshold = 0.70;
+  // Tune this with real attendance samples if false accepts/rejects shift.
+  static const double _cosineThreshold = 0.80;
 
   static const int _inputSize = 112;
-  static const int _embeddingSize = 128;
+  int _embeddingSize = 0;
 
   // ── Init ──────────────────────────────────────────────────────────────────
 
   Future<void> init() async {
     if (_initialized) return;
-    _interpreter = await Interpreter.fromAsset(
-      'assets/models/sface.tflite',
-    );
+    _interpreter = await Interpreter.fromAsset('assets/models/sface.tflite');
     // ignore: avoid_print
     print('[FaceRec] input shape: ${_interpreter!.getInputTensor(0).shape}');
     // ignore: avoid_print
     print('[FaceRec] output shape: ${_interpreter!.getOutputTensor(0).shape}');
+    _configureModelShape();
     _initialized = true;
+  }
+
+  void _configureModelShape() {
+    final inputShape = _interpreter!.getInputTensor(0).shape;
+    if (inputShape.length != 4 ||
+        inputShape[1] != _inputSize ||
+        inputShape[2] != _inputSize ||
+        inputShape[3] != 3) {
+      throw StateError(
+        'Unexpected SFace input shape: $inputShape. Expected [1, 112, 112, 3].',
+      );
+    }
+
+    final outputShape = _interpreter!.getOutputTensor(0).shape;
+    if (outputShape.length != 2 ||
+        outputShape.first != 1 ||
+        outputShape[1] <= 0) {
+      throw StateError(
+        'Unexpected SFace output shape: $outputShape. Expected [1, embedding_size].',
+      );
+    }
+    _embeddingSize = outputShape[1];
   }
 
   Future<void> dispose() async {
@@ -76,7 +97,11 @@ class FaceRecognitionService {
 
     final quality = FaceQualityFilter.evaluate(fullImage, face);
     if (!quality.accepted) {
-      throw QualityFilterException(quality.rejectReason ?? 'Kualitas wajah buruk');
+      // ignore: avoid_print
+      print('[FaceRec] Quality rejected: ${quality.rejectReason}');
+      throw QualityFilterException(
+        quality.rejectReason ?? 'Kualitas wajah buruk',
+      );
     }
 
     final cropped = cropFace(fullImage, face);
@@ -129,7 +154,9 @@ class FaceRecognitionService {
     if (!quality.accepted) {
       // ignore: avoid_print
       print('[FaceRec] Quality rejected: ${quality.rejectReason}');
-      throw QualityFilterException(quality.rejectReason ?? 'Kualitas wajah buruk');
+      throw QualityFilterException(
+        quality.rejectReason ?? 'Kualitas wajah buruk',
+      );
     }
 
     // Compute the padded crop region in the original (pre-rotation) NV21 space.
@@ -321,9 +348,18 @@ class FaceRecognitionService {
     final input = flatInput.toList().reshape([1, _inputSize, _inputSize, 3]);
     final output = [List.filled(_embeddingSize, 0.0)];
 
+    final stopwatch = kDebugMode ? (Stopwatch()..start()) : null;
     _interpreter!.run(input, output);
+    if (stopwatch != null) {
+      stopwatch.stop();
+      // ignore: avoid_print
+      print('[FaceRec] SFace inference: ${stopwatch.elapsedMilliseconds} ms');
+    }
 
-    return (output[0] as List).map((e) => (e as num).toDouble()).toList();
+    final embedding = (output[0] as List)
+        .map((e) => (e as num).toDouble())
+        .toList(growable: false);
+    return _normalizeEmbedding(embedding);
   }
 
   // ── Matching ──────────────────────────────────────────────────────────────
@@ -462,7 +498,8 @@ class FaceRecognitionService {
   }
 
   /// Average multiple embeddings then L2-normalize.
-  /// Used for multi-angle enrollment averaging.
+  /// Kept for backward-compatible callers; multi-pose matching compares each
+  /// stored pose directly instead of averaging them.
   static List<double> averageEmbeddings(List<List<double>> embeddings) {
     assert(embeddings.isNotEmpty);
     final size = embeddings.first.length;

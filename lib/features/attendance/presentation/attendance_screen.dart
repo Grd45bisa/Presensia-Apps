@@ -35,6 +35,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   bool _checkingFace = false;
   bool _faceMatched = false;
   bool _matchFailed = false;
+  bool _renewalPromptShown = false;
   double? _lastSimilarity;
   int _sampleAttempts = 0;
   double _bestSimilarity = -1.0;
@@ -70,6 +71,30 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     setState(() {
       _isEnrolled = embeddings != null && embeddings.isNotEmpty;
       _enrollChecked = true;
+    });
+    if (_isEnrolled) {
+      unawaited(_maybeShowFaceRenewalReminder(uid));
+    }
+  }
+
+  Future<void> _maybeShowFaceRenewalReminder(String uid) async {
+    if (_renewalPromptShown || !mounted) return;
+
+    bool shouldRenew;
+    try {
+      shouldRenew = await EmbeddingSyncService.instance.shouldRenewEnrollment(
+        uid,
+      );
+    } catch (_) {
+      return;
+    }
+
+    if (!shouldRenew || !mounted || _renewalPromptShown) return;
+    _renewalPromptShown = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_showFaceRenewalDialog());
     });
   }
 
@@ -483,6 +508,51 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _isEnrolled = true;
         _cameraKey = GlobalKey<CameraFaceViewState>();
       });
+    }
+  }
+
+  Future<void> _showFaceRenewalDialog() async {
+    final updateNow = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Perbarui Data Wajah',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Data wajah Anda sudah lebih dari ${EmbeddingSyncService.renewalReminderDays} hari. '
+          'Perbarui agar presensi tetap akurat jika penampilan berubah.',
+          style: const TextStyle(
+            fontSize: 13,
+            height: 1.45,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Nanti'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.face_retouching_natural_rounded, size: 18),
+            label: const Text('Perbarui'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (updateNow == true && mounted) {
+      await _goToEnrollment();
     }
   }
 

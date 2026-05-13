@@ -3,11 +3,11 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 /// Local SQLite store for face embeddings.
-/// Embedding is stored as JSON array of 192 normalized doubles.
+/// Embedding is stored as JSON array of model-sized normalized doubles.
 /// Source of truth is Supabase — this is a local cache for offline-guard
 /// and fast lookup without round-trip latency.
 ///
-/// v2: Supports multiple embeddings per user (one per pose: front/left/right)
+/// v2: Supports multiple embeddings per user (one per pose)
 /// for better matching against varied head poses at attendance time.
 class EmbeddingDb {
   static final EmbeddingDb instance = EmbeddingDb._();
@@ -49,15 +49,11 @@ class EmbeddingDb {
   /// (`List<List<double>>`). Both shapes round-trip through the same column.
   Future<void> upsert(String employeeId, List<double> embedding) async {
     final d = await db;
-    await d.insert(
-      'face_embeddings',
-      {
-        'employee_id': employeeId,
-        'embedding': jsonEncode(embedding),
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await d.insert('face_embeddings', {
+      'employee_id': employeeId,
+      'embedding': jsonEncode(embedding),
+      'updated_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// Save multiple embeddings (e.g. front/left/right poses) as a list-of-lists.
@@ -66,15 +62,11 @@ class EmbeddingDb {
     List<List<double>> embeddings,
   ) async {
     final d = await db;
-    await d.insert(
-      'face_embeddings',
-      {
-        'employee_id': employeeId,
-        'embedding': jsonEncode(embeddings),
-        'updated_at': DateTime.now().toIso8601String(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await d.insert('face_embeddings', {
+      'employee_id': employeeId,
+      'embedding': jsonEncode(embeddings),
+      'updated_at': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   /// Get embedding for an employee, or null if not enrolled.
@@ -110,8 +102,7 @@ class EmbeddingDb {
     if (first is List) {
       // v2: list of lists
       return decoded
-          .map((e) =>
-              (e as List).map((n) => (n as num).toDouble()).toList())
+          .map((e) => (e as List).map((n) => (n as num).toDouble()).toList())
           .toList();
     }
     // v1: single list of doubles

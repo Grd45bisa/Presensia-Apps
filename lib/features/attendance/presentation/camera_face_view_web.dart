@@ -33,6 +33,7 @@ class LiveFaceDetectionResult {
   final int rawHeight;
   final InputImageRotation? rotation;
   final dynamic face;
+  final String? rejectReason;
 
   const LiveFaceDetectionResult({
     required this.status,
@@ -44,6 +45,7 @@ class LiveFaceDetectionResult {
     this.rawHeight = 0,
     this.rotation,
     this.face,
+    this.rejectReason,
   });
 }
 

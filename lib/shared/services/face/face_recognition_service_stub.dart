@@ -56,6 +56,6 @@ class FaceRecognitionService {
   static List<double> bestEmbedding(List<List<double>> e) => [];
   static List<double> normalizeEmbedding(List<double> embedding) =>
       List<double>.from(embedding);
-  double get threshold => 1.25;
+  double get threshold => 0.80;
   bool get isInitialized => false;
 }

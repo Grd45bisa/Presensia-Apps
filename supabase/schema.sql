@@ -399,7 +399,7 @@ $$;
 
 CREATE OR REPLACE FUNCTION find_duplicate_face_owner(
   query_embedding TEXT,
-  match_threshold DOUBLE PRECISION DEFAULT 1.25
+  match_threshold DOUBLE PRECISION DEFAULT 0.78
 )
 RETURNS TABLE (
   employee_id UUID,

@@ -22,8 +22,9 @@ class EmbeddingSyncService {
   EmbeddingSyncService._();
 
   static const _table = 'face_embeddings';
+  static const int renewalReminderDays = 90;
   // Approximate Euclidean distance threshold for cosine similarity 0.70:
-  // euc^2 = 2 - 2*cos => euc = sqrt(2 - 2*0.7) ≈ 0.775
+  // euc^2 = 2 - 2*cos => euc = sqrt(2 - 2*0.7) ~= 0.775
   static const double _duplicateFaceThreshold = 0.78;
 
   SupabaseClient get _client => SupabaseClientService.client;
@@ -33,28 +34,37 @@ class EmbeddingSyncService {
   /// The Supabase duplicate check keeps one registered face from being reused
   /// across different accounts. Re-enrollment for the same account is allowed.
   Future<void> saveEmbedding(String employeeId, List<double> embedding) async {
+    final normalized = FaceRecognitionService.normalizeEmbedding(embedding);
     final duplicated = await isFaceRegisteredByAnotherAccount(
       employeeId,
-      embedding,
+      normalized,
     );
     if (duplicated) throw const DuplicateFaceException();
 
-    await EmbeddingDb.instance.upsert(employeeId, embedding);
+    await EmbeddingDb.instance.upsert(employeeId, normalized);
 
     await _client.from(_table).upsert({
       'employee_id': employeeId,
-      'embedding': jsonEncode(embedding),
+      'embedding': jsonEncode(normalized),
       'face_enrollment_at': DateTime.now().toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
     });
   }
 
-  /// Backward-compatible save for older multi-embedding data.
+  /// Save multiple pose embeddings to SQLite and Supabase.
   Future<void> saveEmbeddings(
     String employeeId,
     List<List<double>> embeddings,
   ) async {
-    for (final embedding in embeddings) {
+    if (embeddings.isEmpty) {
+      throw ArgumentError.value(embeddings, 'embeddings', 'Tidak boleh kosong');
+    }
+
+    final normalizedEmbeddings = embeddings
+        .map(FaceRecognitionService.normalizeEmbedding)
+        .toList(growable: false);
+
+    for (final embedding in normalizedEmbeddings) {
       final duplicated = await isFaceRegisteredByAnotherAccount(
         employeeId,
         embedding,
@@ -62,11 +72,11 @@ class EmbeddingSyncService {
       if (duplicated) throw const DuplicateFaceException();
     }
 
-    await EmbeddingDb.instance.upsertMulti(employeeId, embeddings);
+    await EmbeddingDb.instance.upsertMulti(employeeId, normalizedEmbeddings);
 
     await _client.from(_table).upsert({
       'employee_id': employeeId,
-      'embedding': jsonEncode(embeddings),
+      'embedding': jsonEncode(normalizedEmbeddings),
       'face_enrollment_at': DateTime.now().toIso8601String(),
       'updated_at': DateTime.now().toIso8601String(),
     });
@@ -105,6 +115,26 @@ class EmbeddingSyncService {
         .eq('employee_id', employeeId)
         .maybeSingle();
     return row != null;
+  }
+
+  Future<DateTime?> getFaceEnrollmentAt(String employeeId) async {
+    final row = await _client
+        .from(_table)
+        .select('face_enrollment_at')
+        .eq('employee_id', employeeId)
+        .maybeSingle();
+
+    final raw = row?['face_enrollment_at']?.toString();
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw)?.toLocal();
+  }
+
+  Future<bool> shouldRenewEnrollment(String employeeId) async {
+    final enrolledAt = await getFaceEnrollmentAt(employeeId);
+    if (enrolledAt == null) return false;
+
+    final age = DateTime.now().difference(enrolledAt);
+    return age.inDays >= renewalReminderDays;
   }
 
   /// Returns true if Supabase finds this face on another account.
