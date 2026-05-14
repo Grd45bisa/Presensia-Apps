@@ -30,7 +30,7 @@ class QualityFilterException implements Exception {
   String toString() => reason;
 }
 
-/// SFace pipeline:
+/// MobileFaceNet pipeline:
 ///   Camera frame → MLKit detection → alignment → model-size crop → TFLite → L2-normalized embedding
 ///   Matching: cosine similarity (primary) + euclidean distance (debug)
 class FaceRecognitionService {
@@ -40,7 +40,9 @@ class FaceRecognitionService {
   Interpreter? _interpreter;
   bool _initialized = false;
 
-  // Cosine similarity threshold for L2-normalized SFace embeddings.
+  static const String _modelAsset = 'assets/models/mobilefacenet.tflite';
+
+  // Cosine similarity threshold for L2-normalized face embeddings.
   // Tune this with real attendance samples if false accepts/rejects shift.
   static const double _cosineThreshold = 0.80;
 
@@ -51,7 +53,7 @@ class FaceRecognitionService {
 
   Future<void> init() async {
     if (_initialized) return;
-    _interpreter = await Interpreter.fromAsset('assets/models/sface.tflite');
+    _interpreter = await Interpreter.fromAsset(_modelAsset);
     // ignore: avoid_print
     print('[FaceRec] input shape: ${_interpreter!.getInputTensor(0).shape}');
     // ignore: avoid_print
@@ -68,17 +70,14 @@ class FaceRecognitionService {
 
   void _configureModelShape() {
     final inputShape = _interpreter!.getInputTensor(0).shape;
-    if (inputShape.length != 4 ||
-        inputShape[0] != 1 ||
-        inputShape[3] != 3) {
+    if (inputShape.length != 4 || inputShape[0] != 1 || inputShape[3] != 3) {
       throw StateError(
-        'Unexpected SFace input shape: $inputShape. Expected [1, H, W, 3].',
+        'Unexpected face recognition input shape: $inputShape. '
+        'Expected [1, H, W, 3].',
       );
     }
     if (inputShape[1] != inputShape[2]) {
-      throw StateError(
-        'Non-square model input not supported: $inputShape.',
-      );
+      throw StateError('Non-square model input not supported: $inputShape.');
     }
     _inputSize = inputShape[1];
 
@@ -87,7 +86,9 @@ class FaceRecognitionService {
         outputShape.first != 1 ||
         outputShape[1] <= 0) {
       throw StateError(
-        'Unexpected SFace output shape: $outputShape. Expected [1, embedding_size].',
+        'Unexpected face recognition output shape: $outputShape. '
+        'Expected [1, embedding_size]. Check that $_modelAsset is an '
+        'embedding model, not a detector model.',
       );
     }
     _embeddingSize = outputShape[1];
@@ -110,7 +111,7 @@ class FaceRecognitionService {
     final embedding = _runInference(blank);
     if (embedding.length != _embeddingSize) {
       throw StateError(
-        'SFace inference output length mismatch: ${embedding.length}. '
+        'Face recognition inference output length mismatch: ${embedding.length}. '
         'Expected $_embeddingSize.',
       );
     }
@@ -356,7 +357,7 @@ class FaceRecognitionService {
 
   // ── Alignment & crop ──────────────────────────────────────────────────────
 
-  /// Align and crop the face to the configured model input size for SFace inference.
+  /// Align and crop the face to the configured model input size for inference.
   ///
   /// Strategy (eye-anchor):
   /// 1. If both eye landmarks are available, rotate the full image so the
@@ -365,16 +366,17 @@ class FaceRecognitionService {
   ///    This makes the crop position invariant to small head tilts and
   ///    distance changes — the #1 cause of embedding instability.
   /// 2. If landmarks are absent, fall back to the bounding-box crop with
-  ///    40% padding (generous enough for SFace).
+  ///    40% padding (generous enough for MobileFaceNet).
   List<double> _runInference(img.Image faceImage) {
     if (faceImage.width != _inputSize || faceImage.height != _inputSize) {
       throw StateError(
-        'Unexpected SFace image size: ${faceImage.width}x${faceImage.height}. '
+        'Unexpected face recognition image size: '
+        '${faceImage.width}x${faceImage.height}. '
         'Expected ${_inputSize}x$_inputSize.',
       );
     }
 
-    // SFace: NHWC float32, RGB, normalized to [-1, 1]
+    // MobileFaceNet: NHWC float32, RGB, normalized to [-1, 1]
     final Float32List flatInput = Float32List(_inputSize * _inputSize * 3);
     int idx = 0;
     for (int y = 0; y < _inputSize; y++) {
@@ -395,7 +397,7 @@ class FaceRecognitionService {
     if (stopwatch != null) {
       stopwatch.stop();
       // ignore: avoid_print
-      print('[FaceRec] SFace inference: ${stopwatch.elapsedMilliseconds} ms');
+      print('[FaceRec] inference: ${stopwatch.elapsedMilliseconds} ms');
     }
 
     final embedding = (output[0] as List)

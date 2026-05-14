@@ -42,13 +42,7 @@ class EmbeddingSyncService {
     if (duplicated) throw const DuplicateFaceException();
 
     await EmbeddingDb.instance.upsert(employeeId, normalized);
-
-    await _client.from(_table).upsert({
-      'employee_id': employeeId,
-      'embedding': jsonEncode(normalized),
-      'face_enrollment_at': DateTime.now().toIso8601String(),
-      'updated_at': DateTime.now().toIso8601String(),
-    });
+    await _upsertCloudEmbedding(employeeId, normalized);
   }
 
   /// Save multiple pose embeddings to SQLite and Supabase.
@@ -73,13 +67,7 @@ class EmbeddingSyncService {
     }
 
     await EmbeddingDb.instance.upsertMulti(employeeId, normalizedEmbeddings);
-
-    await _client.from(_table).upsert({
-      'employee_id': employeeId,
-      'embedding': jsonEncode(normalizedEmbeddings),
-      'face_enrollment_at': DateTime.now().toIso8601String(),
-      'updated_at': DateTime.now().toIso8601String(),
-    });
+    await _upsertCloudEmbedding(employeeId, normalizedEmbeddings);
   }
 
   /// Pull embedding(s) from Supabase and cache them locally.
@@ -118,11 +106,17 @@ class EmbeddingSyncService {
   }
 
   Future<DateTime?> getFaceEnrollmentAt(String employeeId) async {
-    final row = await _client
-        .from(_table)
-        .select('face_enrollment_at')
-        .eq('employee_id', employeeId)
-        .maybeSingle();
+    final Map<String, dynamic>? row;
+    try {
+      row = await _client
+          .from(_table)
+          .select('face_enrollment_at')
+          .eq('employee_id', employeeId)
+          .maybeSingle();
+    } on PostgrestException catch (e) {
+      if (_isMissingFaceEnrollmentColumn(e)) return null;
+      rethrow;
+    }
 
     final raw = row?['face_enrollment_at']?.toString();
     if (raw == null || raw.isEmpty) return null;
@@ -229,6 +223,36 @@ class EmbeddingSyncService {
   Future<void> deleteEmbedding(String employeeId) async {
     await EmbeddingDb.instance.delete(employeeId);
     await _client.from(_table).delete().eq('employee_id', employeeId);
+  }
+
+  Future<void> _upsertCloudEmbedding(
+    String employeeId,
+    List<dynamic> embeddings,
+  ) async {
+    final now = DateTime.now().toIso8601String();
+    final payload = <String, dynamic>{
+      'employee_id': employeeId,
+      'embedding': jsonEncode(embeddings),
+      'face_enrollment_at': now,
+      'updated_at': now,
+    };
+
+    try {
+      await _client.from(_table).upsert(payload);
+    } on PostgrestException catch (e) {
+      if (!_isMissingFaceEnrollmentColumn(e)) rethrow;
+
+      // Older Supabase deployments only have employee_id, embedding, updated_at.
+      // Save the biometric backup anyway; renewal reminders stay disabled until
+      // the column migration is applied.
+      payload.remove('face_enrollment_at');
+      await _client.from(_table).upsert(payload);
+    }
+  }
+
+  static bool _isMissingFaceEnrollmentColumn(PostgrestException e) {
+    return e.code == 'PGRST204' &&
+        e.message.contains("'face_enrollment_at' column");
   }
 
   static List<List<double>> _decodeEmbeddings(String raw) {

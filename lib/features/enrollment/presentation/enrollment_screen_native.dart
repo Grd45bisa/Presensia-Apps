@@ -78,50 +78,77 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _initCamera();
-    FaceRecognitionService.instance.init();
+    unawaited(_initCamera());
+    unawaited(_initFaceRecognition());
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.inactive) {
       _camCtrl?.dispose();
+      _camCtrl = null;
     } else if (state == AppLifecycleState.resumed) {
-      _initCamera();
+      unawaited(_initCamera());
+    }
+  }
+
+  Future<void> _initFaceRecognition() async {
+    try {
+      await FaceRecognitionService.instance.init();
+    } catch (e) {
+      if (!mounted || _disposed) return;
+      setState(() {
+        _errorMsg = 'Gagal memuat model pengenalan wajah: ${e.toString()}';
+        _step = _EnrollStep.error;
+      });
     }
   }
 
   Future<void> _initCamera() async {
-    final cameras = await availableCameras();
-    if (cameras.isEmpty || !mounted || _disposed) return;
+    try {
+      final previous = _camCtrl;
+      _camCtrl = null;
+      await previous?.dispose();
 
-    final front = cameras.firstWhere(
-      (c) => c.lensDirection == CameraLensDirection.front,
-      orElse: () => cameras.first,
-    );
+      final cameras = await availableCameras();
+      if (cameras.isEmpty || !mounted || _disposed) return;
 
-    final ctrl = CameraController(
-      front,
-      ResolutionPreset.high,
-      enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.jpeg,
-    );
-    await ctrl.initialize();
-    if (!mounted || _disposed) {
-      ctrl.dispose();
+      final front = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first,
+      );
+
+      final ctrl = CameraController(
+        front,
+        ResolutionPreset.high,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+      await ctrl.initialize();
+      if (!mounted || _disposed) {
+        await ctrl.dispose();
+        return;
+      }
+
+      // Gunakan auto exposure dan auto focus.
+      try {
+        await ctrl.setExposureMode(ExposureMode.auto);
+        await ctrl.setExposureOffset(0.0);
+      } catch (_) {}
+      try {
+        await ctrl.setFocusMode(FocusMode.auto);
+      } catch (_) {}
+
+      setState(() => _camCtrl = ctrl);
+    } catch (_) {
+      if (!mounted || _disposed) return;
+      setState(() {
+        _errorMsg =
+            'Gagal membuka kamera. Pastikan izin kamera aktif, lalu coba lagi.';
+        _step = _EnrollStep.error;
+      });
       return;
     }
-
-    // Gunakan auto exposure dan auto focus.
-    try {
-      await ctrl.setExposureMode(ExposureMode.auto);
-      await ctrl.setExposureOffset(0.0);
-    } catch (_) {}
-    try {
-      await ctrl.setFocusMode(FocusMode.auto);
-    } catch (_) {}
-
-    setState(() => _camCtrl = ctrl);
   }
 
   @override
@@ -263,6 +290,10 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
       _errorMsg = null;
       _capturing = false;
     });
+    if (_camCtrl == null || !_camCtrl!.value.isInitialized) {
+      unawaited(_initCamera());
+    }
+    unawaited(_initFaceRecognition());
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────

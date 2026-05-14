@@ -1,0 +1,2 @@
+ALTER TABLE public.face_embeddings
+ADD COLUMN IF NOT EXISTS face_enrollment_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
