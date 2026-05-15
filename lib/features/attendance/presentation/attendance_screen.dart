@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -58,10 +59,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   static const int _maxVerificationSamples = 5;
   static const int _maxVerificationCaptures = 10;
   static const int _minPassingSamples = 4;
-  static const double _sampleAcceptThreshold = 0.87;
-  static const double _bestAcceptThreshold = 0.91;
-  static const double _averageAcceptThreshold = 0.88;
-  static const double _weakestAcceptedSampleThreshold = 0.82;
+  static const double _sampleAcceptThreshold = 0.93;
+  static const double _bestAcceptThreshold = 0.95;
+  static const double _averageAcceptThreshold = 0.93;
+  static const double _weakestAcceptedSampleThreshold = 0.90;
 
   DateTime get _today =>
       DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
@@ -173,6 +174,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         } else {
           _showFaceMatchFailed('Wajah tidak terbaca dengan jelas.');
         }
+        return;
+      }
+
+      // NEW: Helper for duplicate face check
+      final duplicateOwner = await _checkForDuplicateFaceOwner(query);
+      if (duplicateOwner != null && duplicateOwner != uid) {
+        _showFaceMatchFailed('Wajah ini terdeteksi pada akun lain. Silakan konfirmasi.');
         return;
       }
 
@@ -337,7 +345,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       }
 
       if (!_isCheckedIn) {
-        final record = await AttendanceService.instance.checkIn(
+        final record = await AttendanceService.instance.checkInWithFaceNonce(
           uid,
           source: AttendanceSource.face,
         );
@@ -355,7 +363,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           color: AppColors.success,
         );
       } else {
-        final record = await AttendanceService.instance.checkOut(uid);
+        final record = await AttendanceService.instance.checkOutWithFaceNonce(uid);
         if (!mounted) return;
         _store.setAttendance(record);
         NotificationProvider.instance.refresh();
@@ -1067,7 +1075,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 active: widget.isActive,
                 hint: 'Arahkan wajah dan tahan posisi',
                 liveMode: false,
-                enableLiveness: false,
+                enableLiveness: true,
                 onTimeout: () {
                   if (!mounted) return;
                   _sampleAttempts++;
@@ -1340,4 +1348,27 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     ];
     return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
   }
+
+Future<String?> _checkForDuplicateFaceOwner(List<double> embedding) async {
+  final supabase = SupabaseClientService.client;
+  final result = await supabase.rpc(
+    'find_duplicate_face_owner',
+    params: {
+      'query_embedding': jsonEncode(embedding),
+      'match_threshold': EmbeddingSyncService._duplicateFaceThreshold,
+    },
+  );
+  if (result is List && result.isNotEmpty) {
+    for (final row in result) {
+      if (row is Map) {
+        final ownerId = row['employee_id']?.toString();
+        final currentUid = AuthService.instance.currentUserId?.toString();
+        if (ownerId != null && ownerId != currentUid) {
+          return ownerId;
+        }
+      }
+    }
+  }
+  return null;
+}
 }

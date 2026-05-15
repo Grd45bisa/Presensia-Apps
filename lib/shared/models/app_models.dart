@@ -42,6 +42,8 @@ class AttendanceRecord {
   final TimeOfDay? checkIn;
   final TimeOfDay? checkOut;
   final String? note;
+  final String? nonce;
+  final DateTime? nonceUsedAt;
 
   const AttendanceRecord({
     required this.id,
@@ -51,6 +53,8 @@ class AttendanceRecord {
     this.checkIn,
     this.checkOut,
     this.note,
+    this.nonce,
+    this.nonceUsedAt,
   });
 
   AttendanceRecord copyWith({
@@ -61,6 +65,8 @@ class AttendanceRecord {
     TimeOfDay? checkIn,
     TimeOfDay? checkOut,
     String? note,
+    String? nonce,
+    DateTime? nonceUsedAt,
     bool clearCheckOut = false,
   }) => AttendanceRecord(
     id: id ?? this.id,
@@ -70,6 +76,8 @@ class AttendanceRecord {
     checkIn: checkIn ?? this.checkIn,
     checkOut: clearCheckOut ? null : (checkOut ?? this.checkOut),
     note: note ?? this.note,
+    nonce: nonce ?? this.nonce,
+    nonceUsedAt: nonceUsedAt ?? this.nonceUsedAt,
   );
 
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
@@ -98,6 +106,10 @@ class AttendanceRecord {
             )
           : null,
       note: json['note'] as String?,
+      nonce: json['nonce'] as String?,
+      nonceUsedAt: json['nonce_used_at'] != null
+          ? DateTime.parse(json['nonce_used_at'] as String)
+          : null,
     );
   }
 
@@ -118,10 +130,11 @@ class AttendanceRecord {
           ? _todayAt(checkOut!).toUtc().toIso8601String()
           : null,
       'note': note,
+      'nonce': nonce,
+      'nonce_used_at': nonceUsedAt?.toUtc().toIso8601String(),
     };
   }
 
-  // Combine the record's date with a TimeOfDay to produce a full DateTime.
   DateTime _todayAt(TimeOfDay t) =>
       DateTime(date.year, date.month, date.day, t.hour, t.minute);
 }
@@ -208,7 +221,6 @@ class WorklogEntry {
               endTime!.minute,
             ).toUtc().toIso8601String()
           : null,
-      // duration is never stored — derived on read
     };
   }
 
@@ -246,7 +258,7 @@ class ReminderEvent {
   final DateTime? endDateTime;
   final bool isAllDay;
   final List<int> reminderOffsetsInMinutes;
-  final List<int> notificationIds; // local-only, never stored in Supabase
+  final List<int> notificationIds;
 
   const ReminderEvent({
     required this.id,
@@ -301,7 +313,7 @@ class ReminderEvent {
           : null,
       isAllDay: (json['is_all_day'] as bool?) ?? false,
       reminderOffsetsInMinutes: offsets,
-      notificationIds: const [], // repopulated by NotificationService on device
+      notificationIds: const [],
     );
   }
 
@@ -315,14 +327,13 @@ class ReminderEvent {
     'end_datetime': endDateTime?.toUtc().toIso8601String(),
     'is_all_day': isAllDay,
     'reminder_offsets_minutes': reminderOffsetsInMinutes,
-    // notificationIds intentionally excluded
   };
 }
 
 // ─── WORK SCHEDULE SETTINGS ──────────────────────────────────────────────────
 
 class WorkScheduleSettings {
-  final Set<int> offDays; // DateTime.weekday: 1=Mon … 7=Sun
+  final Set<int> offDays;
   final List<int> defaultReminderOffsetsInMinutes;
   final bool autoMarkMissingAttendance;
 

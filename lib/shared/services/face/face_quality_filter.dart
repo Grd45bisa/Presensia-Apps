@@ -21,18 +21,18 @@ class FrameQualityResult {
 /// Stateless utility that scores and filters face frames before embedding
 /// extraction. These checks keep low-quality frames out of TFLite inference.
 class FaceQualityFilter {
-  /// Face bounding-box height must be at least 15% of full frame height.
-  static const double _minFaceHeightRatio = 0.15;
+  /// Face bounding-box height must be at least 25% of full frame height.
+  static const double _minFaceHeightRatio = 0.25;
 
   /// Laplacian variance threshold for blur detection.
-  static const double _minSharpness = 100.0;
+  static const double _minSharpness = 150.0;
 
   /// Mean luminance range [0, 255] for the cropped face region.
-  static const double _minBrightness = 50.0;
-  static const double _maxBrightness = 200.0;
+  static const double _minBrightness = 80.0;
+  static const double _maxBrightness = 180.0;
 
-  static const double _maxYawPitchDegrees = 20.0;
-  static const double _maxRollDegrees = 15.0;
+  static const double _maxYawPitchDegrees = 15.0;
+  static const double _maxRollDegrees = 10.0;
 
   /// Decode an image payload and reject it when Laplacian variance is < 100.
   static bool isImageTooBlurry(Uint8List bytes) {

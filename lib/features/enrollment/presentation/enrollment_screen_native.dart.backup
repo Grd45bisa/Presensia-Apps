@@ -83,7 +83,7 @@ class EnrollmentScreen extends StatefulWidget {
 
 class _EnrollmentScreenState extends State<EnrollmentScreen>
     with WidgetsBindingObserver {
-  static const int _samplesPerStage = 4;
+  static const int _samplesPerStage = 3;
   static const int _targetEmbeddingCount = _samplesPerStage * 3;
   static const Duration _frameThrottle = Duration(milliseconds: 260);
   static const Duration _stageSettleDelay = Duration(milliseconds: 650);

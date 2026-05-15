@@ -123,6 +123,41 @@ class AttendanceService {
     return AttendanceRecord.fromJson(updated);
   }
 
+  Future<AttendanceRecord> checkInWithFaceNonce(
+    String employeeId, {
+    AttendanceSource source = AttendanceSource.face,
+    String? note,
+  }) async {
+    final now = DateTime.now();
+    final nonce = _uuid.v4();
+
+    final data = await _db.rpc(
+      'check_in_with_nonce',
+      params: {
+        'p_employee_id': employeeId,
+        'p_nonce': nonce,
+        'p_timestamp': now.toUtc().toIso8601String(),
+        'p_note': note,
+      },
+    );
+    return AttendanceRecord.fromJson((data as List).first as Map<String, dynamic>);
+  }
+
+  Future<AttendanceRecord> checkOutWithFaceNonce(String employeeId) async {
+    final now = DateTime.now();
+    final nonce = _uuid.v4();
+
+    final data = await _db.rpc(
+      'check_out_with_nonce',
+      params: {
+        'p_employee_id': employeeId,
+        'p_nonce': nonce,
+        'p_timestamp': now.toUtc().toIso8601String(),
+      },
+    );
+    return AttendanceRecord.fromJson((data as List).first as Map<String, dynamic>);
+  }
+
   /// Full upsert — used for manual entry and calendar edits.
   Future<AttendanceRecord> upsertRecord(
     AttendanceRecord record,

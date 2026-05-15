@@ -23,9 +23,10 @@ class EmbeddingSyncService {
 
   static const _table = 'face_embeddings';
   static const int renewalReminderDays = 90;
-  // Approximate Euclidean distance threshold for cosine similarity 0.70:
-  // euc^2 = 2 - 2*cos => euc = sqrt(2 - 2*0.7) ~= 0.775
-  static const double _duplicateFaceThreshold = 0.78;
+  // Approximate Euclidean distance threshold for cosine similarity 0.93:
+  // euc^2 = 2 - 2*cos => euc = sqrt(2 - 2*0.93) ~= 0.374
+  static const double _duplicateFaceThreshold = 0.37;
+  static double get duplicateFaceThreshold => _duplicateFaceThreshold;
 
   SupabaseClient get _client => SupabaseClientService.client;
 

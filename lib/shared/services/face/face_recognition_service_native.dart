@@ -44,7 +44,7 @@ class FaceRecognitionService {
 
   // Cosine similarity threshold for L2-normalized face embeddings.
   // Tune this with real attendance samples if false accepts/rejects shift.
-  static const double _cosineThreshold = 0.80;
+  static const double _cosineThreshold = 0.93;
 
   int _inputSize = 0;
   int _embeddingSize = 0;
