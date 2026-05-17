@@ -182,16 +182,19 @@ class FaceRecognitionService {
     required int height,
     required InputImageRotation rotation,
     required Face face,
+    bool enforceQuality = true,
   }) async {
     if (!_initialized) await init();
 
-    final quality = FaceQualityFilter.evaluateFast(face, width, height);
-    if (!quality.accepted) {
-      // ignore: avoid_print
-      print('[FaceRec] Quality rejected: ${quality.rejectReason}');
-      throw QualityFilterException(
-        quality.rejectReason ?? 'Kualitas wajah buruk',
-      );
+    if (enforceQuality) {
+      final quality = FaceQualityFilter.evaluateFast(face, width, height);
+      if (!quality.accepted) {
+        // ignore: avoid_print
+        print('[FaceRec] Quality rejected: ${quality.rejectReason}');
+        throw QualityFilterException(
+          quality.rejectReason ?? 'Kualitas wajah buruk',
+        );
+      }
     }
 
     // Compute the padded crop region in the original (pre-rotation) NV21 space.

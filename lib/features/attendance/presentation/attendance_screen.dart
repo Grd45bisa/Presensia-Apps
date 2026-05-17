@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image/image.dart' as img;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/services/attendance_service.dart';
@@ -57,13 +58,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   int _sampleAttempts = 0;
   double _bestSimilarity = -1.0;
   final List<List<double>> _verificationEmbeddings = [];
-  static const int _maxVerificationSamples = 5;
-  static const int _maxVerificationCaptures = 10;
-  static const int _minPassingSamples = 4;
-  static const double _sampleAcceptThreshold = 0.93;
-  static const double _bestAcceptThreshold = 0.95;
-  static const double _averageAcceptThreshold = 0.93;
-  static const double _weakestAcceptedSampleThreshold = 0.90;
+  static const int _maxVerificationSamples = 1;
+  static const int _maxVerificationCaptures = 1;
+  static const int _minPassingSamples = 1;
+  static const double _sampleAcceptThreshold = 0.83;
+  static const double _bestAcceptThreshold = 0.83;
+  static const double _averageAcceptThreshold = 0.83;
+  static const double _weakestAcceptedSampleThreshold = 0.83;
+  static const double _registeredOtherFaceRejectDistance = 0.49;
 
   DateTime get _today =>
       DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
@@ -178,10 +180,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         return;
       }
 
-      // NEW: Helper for duplicate face check
       final duplicateOwner = await _checkForDuplicateFaceOwner(query);
       if (duplicateOwner != null && duplicateOwner != uid) {
-        _showFaceMatchFailed('Wajah ini terdeteksi pada akun lain. Silakan konfirmasi.');
+        _showFaceMatchFailed(
+          'Wajah ini terdeteksi pada akun lain. Silakan konfirmasi.',
+        );
         return;
       }
 
@@ -209,6 +212,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _bestSimilarity = decision.bestSimilarity;
         _showFaceMatchFailed(
           'Wajah tidak cukup konsisten dengan data terdaftar. Silakan ulangi.',
+        );
+        return;
+      }
+
+      final otherOwner = await _checkSamplesAgainstOtherRegisteredUsers(
+        _verificationEmbeddings,
+      );
+      if (otherOwner != null && otherOwner != uid) {
+        _showFaceMatchFailed(
+          'Wajah lebih dekat ke akun lain. Presensi ditolak.',
         );
         return;
       }
@@ -386,10 +399,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       _resetFaceVerificationState();
       if (!_isCheckedOut) _cameraKey.currentState?.resetToReady();
     } catch (e) {
+      // ignore: avoid_print
+      print('[Attendance] Failed to save attendance: $e');
       if (mounted) {
+        final message = e is PostgrestException
+            ? 'Gagal menyimpan presensi: ${e.message}'
+            : 'Gagal menyimpan presensi. Coba lagi.';
         _showResult(
           success: false,
-          message: 'Gagal menyimpan presensi. Coba lagi.',
+          message: message,
         );
       }
     } finally {
@@ -1076,7 +1094,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 active: widget.isActive,
                 hint: 'Arahkan wajah dan tahan posisi',
                 liveMode: false,
-                enableLiveness: true,
+                enableLiveness: false,
                 onTimeout: () {
                   if (!mounted) return;
                   _sampleAttempts++;
@@ -1350,13 +1368,31 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
   }
 
-  Future<String?> _checkForDuplicateFaceOwner(List<double> embedding) async {
+  Future<String?> _checkSamplesAgainstOtherRegisteredUsers(
+    List<List<double>> embeddings,
+  ) async {
+    for (final embedding in embeddings) {
+      final ownerId = await _checkForDuplicateFaceOwner(
+        embedding,
+        matchThreshold: _registeredOtherFaceRejectDistance,
+      );
+      if (ownerId != null) return ownerId;
+    }
+    return null;
+  }
+
+  Future<String?> _checkForDuplicateFaceOwner(
+    List<double> embedding, {
+    double? matchThreshold,
+  }) async {
+    final threshold =
+        matchThreshold ?? EmbeddingSyncService.duplicateFaceThreshold;
     final supabase = SupabaseClientService.client;
     final result = await supabase.rpc(
       'find_duplicate_face_owner',
       params: {
         'query_embedding': jsonEncode(embedding),
-        'match_threshold': EmbeddingSyncService.duplicateFaceThreshold,
+        'match_threshold': threshold,
       },
     );
     if (result is List && result.isNotEmpty) {

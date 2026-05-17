@@ -1094,7 +1094,9 @@ class CameraFaceViewState extends State<CameraFaceView>
                       const SizedBox(width: 6),
                       Text(
                         widget.liveMode
-                            ? (_livenessPassed
+                            ? (!widget.enableLiveness
+                                  ? 'Arahkan wajah'
+                                  : _livenessPassed
                                   ? 'Liveness OK'
                                   : (_blinkCount == 0
                                         ? 'Kedipkan mata 2x'

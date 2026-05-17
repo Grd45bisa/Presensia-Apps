@@ -41,6 +41,7 @@ class FaceRecognitionService {
     required int height,
     required InputImageRotation rotation,
     required dynamic face,
+    bool enforceQuality = true,
   }) async => null;
   RecognitionResult findBestMatch(
     List<double> q,

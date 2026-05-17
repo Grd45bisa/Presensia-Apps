@@ -296,7 +296,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
       }
 
       final face = faces.first;
-      final quality = FaceQualityFilter.evaluateFast(
+      final quality = _evaluateEnrollmentQuality(
         face,
         image.width,
         image.height,
@@ -439,6 +439,51 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
     _lastRoll = null;
   }
 
+  FrameQualityResult _evaluateEnrollmentQuality(
+    Face face,
+    int frameWidth,
+    int frameHeight,
+  ) {
+    final quality = FaceQualityFilter.evaluateFast(face, frameWidth, frameHeight);
+    if (quality.accepted || _stage == _EnrollStage.center) return quality;
+
+    final yaw = face.headEulerAngleY?.abs();
+    final yawRejected =
+        quality.rejectReason == 'Hadapkan wajah ke depan' &&
+        yaw != null &&
+        yaw > 10;
+
+    if (!yawRejected ||
+        (_stage != _EnrollStage.left && _stage != _EnrollStage.right)) {
+      return quality;
+    }
+
+    final pitch = face.headEulerAngleX?.abs();
+    final roll = face.headEulerAngleZ?.abs();
+    if (pitch != null && pitch > 18) {
+      return const FrameQualityResult(
+        accepted: false,
+        score: 0,
+        rejectReason: 'Jangan terlalu menunduk atau mendongak',
+      );
+    }
+    if (roll != null && roll > 14) {
+      return const FrameQualityResult(
+        accepted: false,
+        score: 0,
+        rejectReason: 'Jaga kepala tetap tegak',
+      );
+    }
+
+    final faceHeightRatio = face.boundingBox.height / frameHeight;
+    final sizeScore = (faceHeightRatio / 0.45).clamp(0.0, 1.0);
+    final rollScore = roll != null
+        ? (1.0 - roll / 14.0).clamp(0.0, 1.0)
+        : 1.0;
+    final score = (sizeScore * 0.6 + rollScore * 0.4).clamp(0.0, 1.0);
+    return FrameQualityResult(accepted: true, score: score);
+  }
+
   bool _poseMatchesStage(Face face, _EnrollStage stage) {
     final yaw = face.headEulerAngleY;
     final pitch = face.headEulerAngleX?.abs();
@@ -450,11 +495,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 
     switch (stage) {
       case _EnrollStage.center:
-        return yaw.abs() <= 8;
+        return yaw.abs() <= 10;
       case _EnrollStage.left:
-        return yaw >= 15 && yaw <= 45;
+        return yaw >= 10 && yaw <= 45;
       case _EnrollStage.right:
-        return yaw <= -15 && yaw >= -45;
+        return yaw <= -10 && yaw >= -45;
       case _EnrollStage.blink:
         return true;
     }
@@ -464,11 +509,11 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
     final yaw = face.headEulerAngleY ?? 0;
     switch (stage) {
       case _EnrollStage.center:
-        return yaw.abs() <= 8 ? 'Tahan posisi...' : 'Hadapkan wajah lurus';
+        return yaw.abs() <= 10 ? 'Tahan posisi...' : 'Hadapkan wajah lurus';
       case _EnrollStage.left:
-        return 'Tengok kiri 15-45 derajat';
+        return 'Tengok kiri 10-45 derajat';
       case _EnrollStage.right:
-        return 'Tengok kanan 15-45 derajat';
+        return 'Tengok kanan 10-45 derajat';
       case _EnrollStage.blink:
         return 'Kedipkan mata 2x';
     }
@@ -496,6 +541,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
               height: candidate.rawHeight,
               rotation: candidate.rotation,
               face: candidate.face,
+              enforceQuality: false,
             );
         if (embedding != null) embeddings.add(embedding);
       }

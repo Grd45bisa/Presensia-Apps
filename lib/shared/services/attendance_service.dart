@@ -140,7 +140,7 @@ class AttendanceService {
         'p_note': note,
       },
     );
-    return AttendanceRecord.fromJson((data as List).first as Map<String, dynamic>);
+    return _recordFromRpcResponse(data);
   }
 
   Future<AttendanceRecord> checkOutWithFaceNonce(String employeeId) async {
@@ -155,7 +155,7 @@ class AttendanceService {
         'p_timestamp': now.toUtc().toIso8601String(),
       },
     );
-    return AttendanceRecord.fromJson((data as List).first as Map<String, dynamic>);
+    return _recordFromRpcResponse(data);
   }
 
   /// Full upsert — used for manual entry and calendar edits.
@@ -184,4 +184,16 @@ class AttendanceService {
 
   static String _dateStr(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  AttendanceRecord _recordFromRpcResponse(dynamic data) {
+    if (data is Map<String, dynamic>) {
+      return AttendanceRecord.fromJson(data);
+    }
+    if (data is List && data.isNotEmpty && data.first is Map) {
+      return AttendanceRecord.fromJson(
+        Map<String, dynamic>.from(data.first as Map),
+      );
+    }
+    throw StateError('Respons presensi dari server tidak valid.');
+  }
 }
