@@ -44,6 +44,7 @@ dependencies:
   sqflite: ^2.3.3
   path_provider: ^2.1.5
   image: ^4.2.0
+  image_picker: ^1.1.2
   connectivity_plus: ^6.1.4
   screen_brightness: ^1.0.1
   path: ^1.9.0

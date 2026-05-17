@@ -5,6 +5,7 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/face/embedding_sync_service.dart';
 import '../../enrollment/presentation/enrollment_screen.dart';
+import 'face_ai_lab_screen.dart';
 import '../controller/profile_controller.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -44,6 +45,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (result == true && mounted) {
       setState(() => _isEnrolled = true);
     }
+  }
+
+  Future<void> _goToFaceAiLab() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const FaceAiLabScreen()),
+    );
   }
 
   @override
@@ -96,7 +104,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_rounded, color: AppColors.textPrimary),
+        icon: const Icon(
+          Icons.arrow_back_rounded,
+          color: AppColors.textPrimary,
+        ),
         onPressed: () => Navigator.pop(context),
       ),
       title: const Text(
@@ -159,7 +170,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.surface, width: 1.5),
                   ),
-                  child: const Icon(Icons.circle, size: 8, color: AppColors.success),
+                  child: const Icon(
+                    Icons.circle,
+                    size: 8,
+                    color: AppColors.success,
+                  ),
                 ),
               ),
             ],
@@ -249,13 +264,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _initialsText(String initials) => Text(
-        initials,
-        style: const TextStyle(
-          fontSize: 28,
-          color: AppColors.primary,
-          fontWeight: FontWeight.bold,
-        ),
-      );
+    initials,
+    style: const TextStyle(
+      fontSize: 28,
+      color: AppColors.primary,
+      fontWeight: FontWeight.bold,
+    ),
+  );
 
   // ─── INFO CARD ───────────────────────────────────────────────────────────
 
@@ -336,7 +351,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(width: 12),
           Text(
             label,
-            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
           ),
           const Spacer(),
           Flexible(
@@ -375,7 +393,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     color: _enrollChecked
-                        ? (_isEnrolled ? AppColors.successLight : AppColors.warningLight)
+                        ? (_isEnrolled
+                              ? AppColors.successLight
+                              : AppColors.warningLight)
                         : AppColors.background,
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -407,8 +427,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         !_enrollChecked
                             ? 'Mengecek status...'
                             : _isEnrolled
-                                ? 'Wajah sudah terdaftar'
-                                : 'Belum ada data wajah',
+                            ? 'Wajah sudah terdaftar'
+                            : 'Belum ada data wajah',
                         style: TextStyle(
                           fontSize: 12,
                           color: _enrollChecked && _isEnrolled
@@ -431,13 +451,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-          const Divider(height: 1, indent: 16, endIndent: 16, color: AppColors.border),
+          const Divider(
+            height: 1,
+            indent: 16,
+            endIndent: 16,
+            color: AppColors.border,
+          ),
           InkWell(
             onTap: _goToEnrollment,
-            borderRadius: const BorderRadius.only(
-              bottomLeft: Radius.circular(14),
-              bottomRight: Radius.circular(14),
-            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
               child: Row(
@@ -456,7 +477,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    _isEnrolled ? 'Daftarkan Ulang Wajah' : 'Daftarkan Wajah Sekarang',
+                    _isEnrolled
+                        ? 'Daftarkan Ulang Wajah'
+                        : 'Daftarkan Wajah Sekarang',
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
@@ -464,6 +487,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const Spacer(),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.textSecondary,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const Divider(
+            height: 1,
+            indent: 16,
+            endIndent: 16,
+            color: AppColors.border,
+          ),
+          InkWell(
+            onTap: _goToFaceAiLab,
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(14),
+              bottomRight: Radius.circular(14),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: AppColors.warningLight,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.science_rounded,
+                      size: 16,
+                      color: AppColors.warning,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Testing AI Pengenalan Wajah',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
                   const Icon(
                     Icons.chevron_right_rounded,
                     color: AppColors.textSecondary,
@@ -496,8 +567,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             label: 'Notifikasi',
             trailing: Switch(
               value: profile.notificationsEnabled,
-              onChanged: (val) =>
-                  _controller.toggleNotifications(enabled: val),
+              onChanged: (val) => _controller.toggleNotifications(enabled: val),
               activeThumbColor: AppColors.primary,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
@@ -598,21 +668,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _divider() => const Divider(
-        height: 1,
-        indent: 16,
-        endIndent: 16,
-        color: AppColors.border,
-      );
+    height: 1,
+    indent: 16,
+    endIndent: 16,
+    color: AppColors.border,
+  );
 
   Widget _sectionLabel(String title) => Text(
-        title,
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: AppColors.textSecondary,
-          letterSpacing: 0.4,
-        ),
-      );
+    title,
+    style: const TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+      color: AppColors.textSecondary,
+      letterSpacing: 0.4,
+    ),
+  );
 
   // ─── LOGOUT ──────────────────────────────────────────────────────────────
 
@@ -622,7 +692,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       height: 50,
       child: OutlinedButton.icon(
         onPressed: () => _showLogoutDialog(context),
-        icon: const Icon(Icons.logout_rounded, color: AppColors.error, size: 18),
+        icon: const Icon(
+          Icons.logout_rounded,
+          color: AppColors.error,
+          size: 18,
+        ),
         label: const Text(
           'Keluar dari Akun',
           style: TextStyle(
@@ -716,10 +790,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _sheetField(
                       controller: nameCtrl,
                       label: 'Nama Lengkap',
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty)
-                              ? 'Nama tidak boleh kosong'
-                              : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Nama tidak boleh kosong'
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     _sheetField(
@@ -728,15 +801,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       keyboardType: TextInputType.phone,
                     ),
                     const SizedBox(height: 12),
-                    _sheetField(
-                      controller: deptCtrl,
-                      label: 'Departemen',
-                    ),
+                    _sheetField(controller: deptCtrl, label: 'Departemen'),
                     const SizedBox(height: 12),
-                    _sheetField(
-                      controller: posCtrl,
-                      label: 'Jabatan',
-                    ),
+                    _sheetField(controller: posCtrl, label: 'Jabatan'),
                     if (_controller.updateStatus == ProfileActionStatus.error)
                       _errorBanner(_controller.errorMessage ?? ''),
                     if (_controller.updateStatus == ProfileActionStatus.success)
@@ -761,8 +828,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       ? null
                                       : phoneCtrl.text.trim(),
                                 );
-                                final ok =
-                                    await _controller.updateProfile(updated);
+                                final ok = await _controller.updateProfile(
+                                  updated,
+                                );
                                 if (ok && ctx.mounted) {
                                   Navigator.pop(ctx);
                                   _controller.resetUpdate();
@@ -868,7 +936,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               color: AppColors.textSecondary,
                             ),
                             onPressed: () => setLocal(
-                                () => obscureConfirm = !obscureConfirm),
+                              () => obscureConfirm = !obscureConfirm,
+                            ),
                           ),
                           validator: (v) {
                             if (v != newPassCtrl.text) {
@@ -893,8 +962,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     if (!formKey.currentState!.validate()) {
                                       return;
                                     }
-                                    final ok = await _controller
-                                        .changePassword(newPassCtrl.text);
+                                    final ok = await _controller.changePassword(
+                                      newPassCtrl.text,
+                                    );
                                     if (ok && ctx.mounted) {
                                       Navigator.pop(ctx);
                                       _controller.resetPassword();
@@ -960,13 +1030,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle:
-            const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+        labelStyle: const TextStyle(
+          fontSize: 13,
+          color: AppColors.textSecondary,
+        ),
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: AppColors.background,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: AppColors.border),
@@ -992,38 +1066,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _errorBanner(String msg) => Container(
-        margin: const EdgeInsets.only(top: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.errorLight,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
-        ),
-        child: Text(
-          msg,
-          style: const TextStyle(
-            fontSize: 13,
-            color: AppColors.error,
-          ),
-        ),
-      );
+    margin: const EdgeInsets.only(top: 12),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    decoration: BoxDecoration(
+      color: AppColors.errorLight,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+    ),
+    child: Text(
+      msg,
+      style: const TextStyle(fontSize: 13, color: AppColors.error),
+    ),
+  );
 
   Widget _successBanner(String msg) => Container(
-        margin: const EdgeInsets.only(top: 12),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.successLight,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
-        ),
-        child: Text(
-          msg,
-          style: const TextStyle(
-            fontSize: 13,
-            color: AppColors.success,
-          ),
-        ),
-      );
+    margin: const EdgeInsets.only(top: 12),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    decoration: BoxDecoration(
+      color: AppColors.successLight,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+    ),
+    child: Text(
+      msg,
+      style: const TextStyle(fontSize: 13, color: AppColors.success),
+    ),
+  );
 
   void _showSnack(BuildContext context, String msg) {
     ScaffoldMessenger.of(context).showSnackBar(

@@ -35,6 +35,7 @@ class FaceRecognitionService {
   ) async => null;
   Future<List<double>?> extractEmbeddingFromCrop(dynamic faceImage) async =>
       null;
+  dynamic cropFace(dynamic fullImage, dynamic face) => null;
   Future<List<double>?> extractEmbeddingFromNv21({
     required Uint8List nv21Bytes,
     required int width,
