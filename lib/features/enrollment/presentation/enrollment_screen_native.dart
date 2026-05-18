@@ -11,7 +11,6 @@ import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/face/embedding_sync_service.dart';
 import '../../../shared/services/face/face_quality_filter.dart';
 import '../../../shared/services/face/face_recognition_service.dart';
-import '../../../shared/services/face/sface_recognition_service.dart';
 import '../../../shared/services/screen_brightness_service.dart';
 import '../../../shared/theme/app_colors.dart';
 
@@ -182,9 +181,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 
   Future<void> _initFaceRecognition() async {
     try {
-      await SFaceRecognitionService.instance.init();
-      // MobileFaceNet fallback, keep for easy rollback:
-      // await FaceRecognitionService.instance.init();
+      await FaceRecognitionService.instance.init();
     } catch (e) {
       if (!mounted || _disposed) return;
       setState(() {
@@ -249,9 +246,7 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
     WidgetsBinding.instance.removeObserver(this);
     _detector.close();
     _camCtrl?.dispose();
-    SFaceRecognitionService.instance.dispose();
-    // MobileFaceNet fallback, keep for easy rollback:
-    // FaceRecognitionService.instance.dispose();
+    FaceRecognitionService.instance.dispose();
     unawaited(ScreenBrightnessService.instance.releaseMax());
     super.dispose();
   }
@@ -692,22 +687,15 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
 
       final embeddings = <List<double>>[];
       for (final candidate in candidates.take(_targetEmbeddingCount)) {
-        final embedding = await SFaceRecognitionService.instance
-            .extractEmbeddingFromCrop(
-              candidate.faceCrop,
+        final embedding = await FaceRecognitionService.instance
+            .extractEmbeddingFromNv21(
+              nv21Bytes: candidate.nv21Bytes,
+              width: candidate.rawWidth,
+              height: candidate.rawHeight,
+              rotation: candidate.rotation,
+              face: candidate.face,
+              enforceQuality: false,
             );
-        // SFace memakai crop dari gambar yang sudah dirotasi agar konsisten
-        // dengan Face AI Testing Lab di profile.
-        // MobileFaceNet fallback, keep for easy rollback:
-        // final embedding = await FaceRecognitionService.instance
-        //     .extractEmbeddingFromNv21(
-        //       nv21Bytes: candidate.nv21Bytes,
-        //       width: candidate.rawWidth,
-        //       height: candidate.rawHeight,
-        //       rotation: candidate.rotation,
-        //       face: candidate.face,
-        //       enforceQuality: false,
-        //     );
         if (embedding != null) embeddings.add(embedding);
       }
 

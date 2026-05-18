@@ -16,7 +16,6 @@ import '../../../shared/providers/notification_provider.dart';
 import '../../../shared/store/app_store.dart';
 import '../../../shared/services/face/embedding_sync_service.dart';
 import '../../../shared/services/face/face_recognition_service.dart';
-import '../../../shared/services/face/sface_recognition_service.dart';
 import '../../enrollment/presentation/enrollment_screen.dart';
 import 'camera_face_view.dart';
 
@@ -103,9 +102,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   void initState() {
     super.initState();
     _checkEnrollmentStatus();
-    SFaceRecognitionService.instance.init();
-    // MobileFaceNet fallback, keep for easy rollback:
-    // FaceRecognitionService.instance.init();
+    FaceRecognitionService.instance.init();
   }
 
   Future<void> _checkEnrollmentStatus() async {
@@ -185,32 +182,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         return;
       }
 
-      final sFaceCrop = FaceRecognitionService.instance.cropFace(
-        fullImage,
-        face,
-      );
-      final query = sFaceCrop == null
-          ? null
-          : await SFaceRecognitionService.instance.extractEmbeddingFromCrop(
-              sFaceCrop,
+      final query = nv21Bytes != null
+          ? await FaceRecognitionService.instance.extractEmbeddingFromNv21(
+              nv21Bytes: nv21Bytes,
+              width: rawWidth,
+              height: rawHeight,
+              rotation: rotation,
+              face: face,
+            )
+          : await FaceRecognitionService.instance.extractEmbedding(
+              fullImage,
+              face,
             );
-      // SFace sengaja memakai crop dari fullImage yang sudah dirotasi.
-      // Koordinat Face.boundingBox MLKit mengikuti orientasi input image,
-      // jadi crop langsung dari NV21 mentah bisa meleset dan bikin similarity
-      // meloncat antara sangat kecil dan 1.0.
-      // MobileFaceNet fallback, keep for easy rollback:
-      // final query = nv21Bytes != null
-      //     ? await FaceRecognitionService.instance.extractEmbeddingFromNv21(
-      //         nv21Bytes: nv21Bytes,
-      //         width: rawWidth,
-      //         height: rawHeight,
-      //         rotation: rotation,
-      //         face: face,
-      //       )
-      //     : await FaceRecognitionService.instance.extractEmbedding(
-      //         fullImage,
-      //         face,
-      //       );
       if (query == null) {
         if (_sampleAttempts < _maxVerificationCaptures &&
             _verificationEmbeddings.length < _maxVerificationSamples) {
