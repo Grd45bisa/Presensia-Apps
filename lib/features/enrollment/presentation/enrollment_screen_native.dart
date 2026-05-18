@@ -692,7 +692,17 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
         );
       }
 
-      await EmbeddingSyncService.instance.saveEmbeddings(uid, embeddings);
+      final compactedEmbeddings = _compactEnrollmentEmbeddings(embeddings);
+      if (compactedEmbeddings.length < _scanStages.length) {
+        throw Exception(
+          'Data wajah belum cukup konsisten. Coba ulangi pendaftaran.',
+        );
+      }
+
+      await EmbeddingSyncService.instance.saveEmbeddings(
+        uid,
+        compactedEmbeddings,
+      );
 
       if (!mounted || _disposed) return;
       setState(() => _step = _EnrollStep.done);
@@ -724,6 +734,26 @@ class _EnrollmentScreenState extends State<EnrollmentScreen>
       selected.addAll(stageSamples.take(_samplesPerStage));
     }
     return selected;
+  }
+
+  List<List<double>> _compactEnrollmentEmbeddings(
+    List<List<double>> embeddings,
+  ) {
+    final compacted = <List<double>>[];
+    for (
+      int offset = 0;
+      offset < embeddings.length;
+      offset += _samplesPerStage
+    ) {
+      final group = embeddings.skip(offset).take(_samplesPerStage).toList();
+      if (group.isEmpty) continue;
+      compacted.add(
+        group.length == 1
+            ? group.first
+            : FaceRecognitionService.bestEmbedding(group),
+      );
+    }
+    return compacted;
   }
 
   InputImage? _buildInputImage(CameraImage image) {

@@ -25,14 +25,14 @@ class FaceQualityFilter {
   static const double _minFaceHeightRatio = 0.25;
 
   /// Laplacian variance threshold for blur detection.
-  static const double _minSharpness = 150.0;
+  static const double _minSharpness = 120.0;
 
   /// Mean luminance range [0, 255] for the cropped face region.
-  static const double _minBrightness = 80.0;
-  static const double _maxBrightness = 180.0;
+  static const double _minBrightness = 65.0;
+  static const double _maxBrightness = 205.0;
 
-  static const double _maxYawPitchDegrees = 15.0;
-  static const double _maxRollDegrees = 10.0;
+  static const double _maxYawPitchDegrees = 18.0;
+  static const double _maxRollDegrees = 12.0;
 
   /// Decode an image payload and reject it when Laplacian variance is < 100.
   static bool isImageTooBlurry(Uint8List bytes) {

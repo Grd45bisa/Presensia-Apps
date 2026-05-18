@@ -433,12 +433,12 @@ class CameraFaceViewState extends State<CameraFaceView>
 
   // ── Scan mode (button-triggered) ─────────────────────────────────────────
 
-  void startScan() {
-    if (_scanning || _state == CameraFaceState.done) return;
-    if (_state != CameraFaceState.ready) return;
+  bool startScan() {
+    if (_scanning || _state == CameraFaceState.done) return false;
+    if (_state != CameraFaceState.ready) return false;
 
     final ctrl = _controller;
-    if (ctrl == null || !ctrl.value.isInitialized) return;
+    if (ctrl == null || !ctrl.value.isInitialized) return false;
 
     _scanning = true;
     _processingFrame = false;
@@ -460,6 +460,7 @@ class CameraFaceViewState extends State<CameraFaceView>
     });
 
     unawaited(ctrl.startImageStream(_onCameraFrame));
+    return true;
   }
 
   Future<void> _stopScan() async {

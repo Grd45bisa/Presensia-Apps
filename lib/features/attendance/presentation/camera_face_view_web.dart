@@ -88,7 +88,7 @@ class CameraFaceView extends StatefulWidget {
 }
 
 class CameraFaceViewState extends State<CameraFaceView> {
-  void startScan() {}
+  bool startScan() => false;
   void resetToReady() {}
   void markDone() {}
   Future<void> refreshCamera() async {}
