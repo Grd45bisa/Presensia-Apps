@@ -1,8 +1,8 @@
-# FaceWork Tracker
+# Konsep Project Presensia
 
-Aplikasi mobile employee self-service berbasis Flutter untuk presensi wajah, pencatatan pekerjaan harian, kalender kehadiran, dan laporan performa karyawan.
+Presensia adalah aplikasi mobile employee self-service berbasis Flutter untuk presensi wajah, pencatatan pekerjaan harian, kalender kehadiran, dan laporan performa karyawan.
 
-Dokumen ini menjelaskan kondisi konsep dan implementasi project saat ini.
+Dokumen ini menjelaskan konsep produk dan kondisi implementasi project saat ini.
 
 ---
 
@@ -11,20 +11,24 @@ Dokumen ini menjelaskan kondisi konsep dan implementasi project saat ini.
 - [Latar Belakang](#latar-belakang)
 - [Tujuan Produk](#tujuan-produk)
 - [Target Pengguna](#target-pengguna)
+- [Prinsip Desain Face Recognition](#prinsip-desain-face-recognition)
 - [Alur Penggunaan](#alur-penggunaan)
 - [Status Pengembangan](#status-pengembangan)
 - [Fitur Utama](#fitur-utama)
 - [Arsitektur Sistem](#arsitektur-sistem)
 - [Face Recognition Pipeline](#face-recognition-pipeline)
 - [Flow Enrollment Wajah](#flow-enrollment-wajah)
+- [Flow Presensi Wajah](#flow-presensi-wajah)
+- [Face AI Lab](#face-ai-lab)
 - [Struktur Folder](#struktur-folder)
 - [Setup Singkat](#setup-singkat)
+- [Catatan Pengembangan Lanjutan](#catatan-pengembangan-lanjutan)
 
 ---
 
 ## Latar Belakang
 
-Presensi karyawan dengan metode manual, kartu, PIN, atau tanda tangan mudah dimanipulasi dan sulit dikaitkan langsung dengan produktivitas harian. FaceWork Tracker dibuat untuk menggabungkan presensi, pekerjaan harian, kalender, dan laporan dalam satu aplikasi.
+Presensi karyawan dengan metode manual, kartu, PIN, atau tanda tangan mudah dimanipulasi dan sulit dikaitkan langsung dengan aktivitas kerja harian. Presensia dibuat untuk menggabungkan presensi, pekerjaan harian, kalender, dan laporan dalam satu aplikasi.
 
 Masalah yang ingin diselesaikan:
 
@@ -38,16 +42,16 @@ Masalah yang ingin diselesaikan:
 
 ## Tujuan Produk
 
-1. **Presensi lebih valid**  
+1. **Presensi lebih valid**
    Karyawan melakukan check-in dan check-out melalui pencocokan wajah.
 
-2. **Worklog terpusat**  
+2. **Worklog terpusat**
    Pekerjaan harian dicatat dalam Tracker dan bisa dikaitkan dengan project.
 
-3. **Data mudah dipantau**  
+3. **Data mudah dipantau**
    Kalender dan laporan membantu melihat pola hadir, izin, libur, absen, jam kerja, dan produktivitas.
 
-4. **Pengalaman pengguna jelas**  
+4. **Pengalaman pengguna jelas**
    Aplikasi memberi status visual ketika kamera siap, sedang menganalisis wajah, sukses, atau gagal.
 
 ---
@@ -70,23 +74,45 @@ Masalah yang ingin diselesaikan:
 
 ---
 
+## Prinsip Desain Face Recognition
+
+Face recognition di project ini dibagi menjadi dua tugas yang berbeda:
+
+- **Face detection:** Google ML Kit mencari lokasi wajah, landmark mata, pose Euler, dan sinyal kualitas dasar.
+- **Face recognition:** MobileFaceNet mengubah crop wajah yang sudah dirapikan menjadi embedding 192 dimensi.
+
+Keputusan desain saat ini:
+
+- Model recognition utama hanya **MobileFaceNet**.
+- Semua sumber gambar harus melewati preprocessing yang sama: upright image, ML Kit, face alignment, crop, resize `112x112`, normalisasi piksel, dan L2 normalization.
+- Matching memakai **cosine similarity**, bukan Euclidean sebagai keputusan utama.
+- Enrollment menyimpan beberapa embedding referensi agar presensi lebih stabil.
+- Presensi mengambil skor paling tinggi dari semua embedding referensi user.
+- Face AI Lab dipakai untuk menguji akurasi sebelum liveness production difinalkan.
+
+---
+
 ## Alur Penggunaan
 
 ### 1. Pendaftaran Wajah
 
-Enrollment saat ini dibuat sederhana mengikuti referensi `face-recognition-with-flutter`.
-
 ```
-Buka halaman pendaftaran wajah
+Buka Daftarkan Wajah
         |
         v
-Arahkan wajah ke kamera
+Kamera depan aktif
         |
         v
-Ambil 1 foto wajah
+User mengikuti tahap frontal, kiri ringan, dan kanan ringan
         |
         v
-ML Kit mendeteksi bounding box wajah
+Sistem mengambil total 9 sampel valid
+        |
+        v
+Setiap sampel melewati ML Kit + quality gate
+        |
+        v
+Face alignment berdasarkan landmark mata
         |
         v
 Crop wajah -> resize 112x112
@@ -95,58 +121,61 @@ Crop wajah -> resize 112x112
 MobileFaceNet menghasilkan embedding 192 dimensi
         |
         v
-Embedding disimpan untuk user tersebut
+Sistem menyimpan 6 embedding referensi
 ```
 
 Catatan penting:
 
-- Enrollment hanya mengambil **1 foto wajah**.
-- Tidak ada lagi enrollment multi-pose depan/kiri/kanan/senyum.
-- Embedding disimpan melalui `EmbeddingSyncService.saveEmbedding`.
-- Satu akun hanya boleh memiliki satu wajah aktif.
-- Wajah yang sudah terdaftar di akun lain tidak boleh digunakan untuk enrollment akun berbeda.
-- Jika data wajah tidak ada di SQLite tetapi ada di Supabase, aplikasi otomatis mengambil backup tersebut dan menyimpannya kembali ke SQLite.
+- Enrollment tidak lagi memakai 1 foto.
+- Enrollment mengambil 3 sampel frontal, 3 sampel kiri ringan, dan 3 sampel kanan ringan.
+- Embedding akhir disimpan sebagai 6 referensi: average dan best untuk tiap kelompok pose.
+- Data wajah disimpan melalui `EmbeddingSyncService.saveEmbeddings`.
+- Jika data wajah tidak ada di SQLite tetapi ada di Supabase, aplikasi dapat mengambil backup tersebut dan menyimpannya kembali ke SQLite.
 
 ### 2. Check-In
 
 ```
-Buka tab Absen
+Buka tab Absensi
         |
         v
-Tekan "Konfirmasi Check-In"
+Tekan tombol presensi
         |
         v
-Kamera mulai scan
+Kamera mulai verifikasi
         |
         v
-Frame muncul jika wajah terdeteksi
+Jika switch dev aktif, user diminta kedip
         |
         v
-Sistem menganalisis sampai maksimal 3 sampel
+User menatap lurus ke kamera
         |
-        +-- cocok --> Presensi sukses + popup "Selamat bekerja"
+        v
+Query embedding dibuat dari frame terbaik
         |
-        +-- tidak cocok --> Presensi gagal, minta konfirmasi ulang
+        v
+Query dibandingkan ke 6 embedding referensi user
+        |
+        +-- similarity >= 0.65 --> Check-in berhasil + popup semangat kerja
+        |
+        +-- similarity < 0.65 --> Presensi gagal, coba ulangi
 ```
-
-Saat wajah cocok, aplikasi sengaja menampilkan state loading/analisis sebentar agar proses terasa natural sebelum menampilkan status sukses.
 
 ### 3. Check-Out
 
-Flow check-out sama seperti check-in, tetapi setelah berhasil aplikasi menampilkan popup berisi pesan istirahat.
+Flow check-out memakai verifikasi wajah yang sama. Setelah berhasil, aplikasi menampilkan popup berisi pesan terima kasih dan selamat pulang.
 
 ```
-Tekan "Konfirmasi Check-Out"
+Tekan tombol presensi saat sudah check-in
         |
         v
-Konfirmasi dialog check-out
+Konfirmasi check-out
         |
         v
 Scan dan cocokkan wajah
         |
-        +-- cocok --> Check-out sukses + popup "Selamat beristirahat"
+        +-- cocok --> Check-out sukses + popup selamat pulang
         |
-        +-- tidak cocok --> Presensi gagal, minta konfirmasi ulang
+        +-- tidak cocok --> Presensi gagal, coba ulangi
 ```
 
 ### 4. Tracker Harian
@@ -163,18 +192,20 @@ Kalender menampilkan data presensi, izin/libur, dan worklog per tanggal. Laporan
 
 | Area | Status | Keterangan |
 |---|---|---|
-| UI utama aplikasi | Selesai | Home, Tracker, Absen, Kalender, Laporan, Profil, dan navigasi utama tersedia |
+| UI utama aplikasi | Selesai tahap inti | Home, Tracker, Absensi, Kalender, Laporan, Profil, dan navigasi utama tersedia |
 | Auth Supabase | Selesai | Login, register, reset password, dan session terhubung ke Supabase |
-| Presensi wajah | Selesai tahap inti | Check-in/check-out memakai kamera, ML Kit, MobileFaceNet, dan threshold Euclidean |
-| Enrollment wajah | Selesai tahap inti | 1 foto wajah -> 1 embedding |
-| Multi-sample verification | Selesai | Jika tidak cocok, sistem mencoba maksimal 3 sampel sebelum gagal |
+| Enrollment wajah | Selesai tahap inti | 9 sampel valid, 3 pose ringan, 6 embedding referensi |
+| Presensi wajah | Selesai tahap inti | Check-in/check-out memakai kamera, ML Kit, MobileFaceNet, cosine similarity |
+| Face AI Lab | Selesai tahap dev | Uji foto galeri/kamera terhadap embedding enrollment |
+| Dev switch kedip | Selesai tahap dev | Bisa aktif/nonaktifkan kedip presensi dari Profile |
 | SQLite embedding | Selesai | Cache embedding lokal melalui `EmbeddingDb` |
-| Sync embedding Supabase | Selesai tahap inti | Embedding disimpan/sync melalui tabel `face_embeddings` |
+| Sync embedding Supabase | Selesai tahap inti | Embedding disimpan/sync melalui service embedding |
 | Tracker/worklog | Selesai tahap inti | Project, timer, input manual, edit/delete worklog |
 | Kalender | Selesai tahap inti | Presensi, worklog, izin/libur, dan marker tanggal |
 | Laporan PDF | Selesai tahap inti | Generate dan share PDF memakai `pdf` dan `printing` |
 | Notifikasi lokal | Ada | Reminder check-in/check-out dan kalender |
 | GPS presensi | Belum aktif | Belum ada pencatatan koordinat GPS pada flow presensi saat ini |
+| Liveness production | Belum final | Baru ada switch dev untuk kedip; challenge-response final belum dikunci |
 | Web support kamera | Stub | Kamera/ML Kit diarahkan untuk Android/native; web menampilkan pesan tidak tersedia |
 
 ---
@@ -183,23 +214,34 @@ Kalender menampilkan data presensi, izin/libur, dan worklog per tanggal. Laporan
 
 ### 1. Presensi Wajah
 
-Presensi dilakukan melalui tombol konfirmasi, bukan otomatis dari live preview.
+Presensi dilakukan melalui tombol, bukan otomatis dari live preview.
 
 Karakteristik saat ini:
 
-- Kamera aktif di layar Absen.
-- Frame wajah hanya muncul saat proses konfirmasi/scan.
-- Sistem mengambil beberapa sampel jika wajah tidak langsung cocok.
-- Jika wajah cocok, presensi disimpan dan popup sukses muncul.
-- Jika wajah tidak cocok setelah beberapa sampel, user diminta konfirmasi ulang.
-- Presensi hanya membandingkan wajah dengan embedding milik akun yang sedang login.
+- Kamera aktif di layar Absensi.
+- Layar presensi dibuat fokus ke kamera.
+- User menekan tombol presensi untuk memulai scan.
+- Jika dev switch kedip aktif, sistem meminta kedip dulu.
+- Query embedding dibandingkan ke 6 embedding referensi milik user.
+- Skor MAX dipakai sebagai keputusan akhir.
+- Jika cocok, presensi disimpan dan popup sukses muncul.
 - Presensi tetap membutuhkan koneksi internet untuk menyimpan check-in/check-out.
 
-### 2. Enrollment Wajah 1 Kali
+### 2. Enrollment Wajah Multi-Sampel
 
-Karyawan mendaftarkan wajah dengan satu foto. Sistem mendeteksi wajah, crop bounding box, resize ke `112x112`, menjalankan MobileFaceNet, lalu menyimpan embedding.
+Enrollment dibuat lebih kuat dengan 9 sampel:
 
-### 3. Tracker Project dan Worklog
+- 3 frontal.
+- 3 kiri ringan.
+- 3 kanan ringan.
+
+Setiap sampel yang diterima harus melewati quality gate dasar, lalu diproses dengan face alignment dan MobileFaceNet.
+
+### 3. Face AI Lab
+
+Face AI Lab membantu melihat apakah pipeline recognition sudah sehat sebelum dipakai di presensi production. Lab memakai data enrollment user saat ini sebagai target dan membandingkannya dengan foto uji dari galeri atau kamera.
+
+### 4. Tracker Project dan Worklog
 
 Tracker digunakan untuk:
 
@@ -209,7 +251,7 @@ Tracker digunakan untuk:
 - Menambah worklog manual.
 - Mengedit dan menghapus worklog.
 
-### 4. Kalender Kehadiran
+### 5. Kalender Kehadiran
 
 Kalender menampilkan:
 
@@ -220,7 +262,7 @@ Kalender menampilkan:
 - Worklog pada tanggal tertentu.
 - Input manual aktivitas/presensi dari kalender.
 
-### 5. Laporan Performa
+### 6. Laporan Performa
 
 Laporan memakai data presensi dan worklog untuk membuat ringkasan:
 
@@ -230,9 +272,13 @@ Laporan memakai data presensi dan worklog untuk membuat ringkasan:
 - Statistik worklog.
 - Export PDF.
 
-### 6. Profil dan Pengaturan Wajah
+### 7. Profil dan Pengaturan Wajah
 
-Profil menampilkan status data wajah. User dapat masuk ke flow enrollment untuk mendaftarkan ulang wajah jika diperlukan.
+Profil menampilkan status data wajah. User dapat:
+
+- Daftarkan ulang wajah.
+- Membuka Face AI Lab.
+- Mengaktifkan atau menonaktifkan dev switch kedip presensi.
 
 ---
 
@@ -256,6 +302,7 @@ Flutter App
   |     +-- ProjectService
   |     +-- FaceRecognitionService
   |     +-- EmbeddingSyncService
+  |     +-- AttendanceDevSettings
   |     +-- NotificationService
   |
   +-- Storage
@@ -272,6 +319,7 @@ Flutter App
 | Face detection | `google_mlkit_face_detection` |
 | Face recognition | MobileFaceNet via `tflite_flutter` |
 | Image processing | `image` |
+| Image picker | `image_picker` |
 | Kalender | `table_calendar` |
 | Grafik laporan | `fl_chart` |
 | PDF export | `pdf`, `printing` |
@@ -282,22 +330,34 @@ Flutter App
 
 ## Face Recognition Pipeline
 
-Pipeline saat ini mengikuti pola project referensi `face-recognition-with-flutter`.
+Pipeline saat ini:
 
 ```
 Foto / frame kamera
         |
         v
+Normalisasi orientasi gambar
+        |
+        v
 ML Kit Face Detection
         |
         v
-Ambil bounding box wajah
+Validasi 1 wajah, ukuran wajah, pose, dan kualitas dasar
+        |
+        v
+Ambil landmark mata
+        |
+        v
+Face alignment agar mata sejajar horizontal
         |
         v
 Crop wajah
         |
         v
-Resize ke 112x112
+Resize ke 112x112 RGB
+        |
+        v
+Normalisasi piksel sesuai input MobileFaceNet
         |
         v
 MobileFaceNet TFLite
@@ -306,10 +366,13 @@ MobileFaceNet TFLite
 Embedding 192 dimensi
         |
         v
-Euclidean distance ke embedding terdaftar
+L2 normalization
         |
         v
-distance <= 1.25 ? cocok : tidak cocok
+Cosine similarity ke embedding referensi
+        |
+        v
+similarity >= 0.65 ? cocok : tidak cocok
 ```
 
 Detail teknis:
@@ -317,11 +380,12 @@ Detail teknis:
 - Model utama: `assets/models/mobilefacenet.tflite`
 - Input model: `112x112x3`
 - Output embedding: 192 dimensi
-- Metode pencocokan: Euclidean distance
-- Threshold saat ini: `1.25`
-- Maksimal sampel presensi: `3`
+- Metode pencocokan: cosine similarity
+- Threshold presensi saat ini: `0.65`
+- Embedding referensi: 6 per user
+- Skor keputusan: nilai similarity tertinggi dari semua embedding referensi user
 
-Jika sampel pertama tidak cocok, aplikasi mencoba sampel berikutnya sebelum menyatakan gagal. Ini mengurangi kemungkinan gagal hanya karena blur, pose kurang pas, atau pencahayaan sesaat.
+Uji manual terakhir menunjukkan wajah asli bisa mencapai sekitar 87% similarity setelah pipeline alignment dan referensi embedding dirapikan, sedangkan wajah berbeda berada jauh lebih rendah pada pengujian manual.
 
 ---
 
@@ -334,28 +398,103 @@ User membuka enrollment
 Kamera depan aktif
         |
         v
-User tekan "Ambil Foto"
+Sistem meminta pose frontal
         |
         v
-Foto diproses ML Kit
+Ambil 3 sampel valid
         |
         v
-Jika wajah ditemukan:
-  crop -> resize -> MobileFaceNet -> embedding
+Sistem meminta pose kiri ringan
         |
         v
-saveEmbedding(userId, embedding)
+Ambil 3 sampel valid
         |
         v
-Enrollment selesai
+Sistem meminta pose kanan ringan
+        |
+        v
+Ambil 3 sampel valid
+        |
+        v
+Buat embedding tiap sampel
+        |
+        v
+Buat avg dan best untuk tiap pose
+        |
+        v
+Simpan 6 embedding referensi
 ```
 
-Perbedaan dari konsep lama:
+Alasan memakai 6 embedding:
 
-- Tidak memakai 3 sudut.
-- Tidak merata-ratakan beberapa embedding.
-- Tidak melakukan adaptive update saat presensi.
-- Sistem sengaja dibuat sederhana agar perilakunya sama seperti referensi.
+- Rata-rata embedding membuat representasi lebih stabil.
+- Best embedding menjaga skor tetap tinggi untuk pose yang benar-benar bersih.
+- Pose kiri/kanan ringan membantu ketika wajah presensi tidak 100% frontal.
+- Presensi mengambil MAX score sehingga query bisa cocok ke referensi paling dekat.
+
+---
+
+## Flow Presensi Wajah
+
+Presensi memakai data wajah dari enrollment, bukan data manual dari Face AI Lab.
+
+```
+Tekan tombol presensi
+        |
+        v
+Cek koneksi internet
+        |
+        v
+Mulai scan kamera
+        |
+        v
+Jika dev switch aktif: cek kedip
+        |
+        v
+Ambil frame wajah stabil
+        |
+        v
+Query embedding dibuat
+        |
+        v
+Compare query ke 6 referensi user
+        |
+        v
+Ambil similarity tertinggi
+        |
+        +-- >= 0.65: simpan attendance
+        |
+        +-- < 0.65: tampilkan gagal
+```
+
+Catatan:
+
+- Check-in menyimpan source `face`.
+- Check-out mengikuti record presensi hari ini.
+- Popup sukses berbeda antara check-in dan check-out.
+- Error seperti internet mati, wajah tidak cocok, atau timeout ditampilkan sebagai snackbar.
+
+---
+
+## Face AI Lab
+
+Face AI Lab adalah alat internal dev untuk menguji recognition tanpa harus menjalankan flow presensi penuh.
+
+Fungsi lab:
+
+- Mengambil target dari embedding enrollment user yang sedang login.
+- Menguji foto dari galeri atau kamera.
+- Menampilkan similarity dan threshold pass/fail.
+- Menampilkan quality score, pose Euler, ukuran wajah, inference time, distance, dan best target.
+- Membantu membedakan masalah enrollment buruk, foto uji buruk, atau pipeline preprocessing.
+
+Threshold yang ditampilkan:
+
+- `0.65` longgar / target presensi saat ini.
+- `0.70` sedang.
+- `0.75` ketat.
+
+Lab tidak menggantikan presensi dan tidak menyimpan kehadiran.
 
 ---
 
@@ -368,7 +507,6 @@ face_recognizer/
 |-- assets/
 |   |-- models/
 |       |-- mobilefacenet.tflite
-|       |-- sface.tflite
 |-- lib/
 |   |-- main.dart
 |   |-- features/
@@ -398,12 +536,14 @@ File penting terkait wajah:
 
 | File | Fungsi |
 |---|---|
-| `lib/features/enrollment/presentation/enrollment_screen_native.dart` | Pendaftaran wajah 1 foto |
-| `lib/features/attendance/presentation/attendance_screen.dart` | Flow presensi dan hasil sukses/gagal |
-| `lib/features/attendance/presentation/camera_face_view_native.dart` | Kamera, deteksi wajah, dan overlay frame |
-| `lib/shared/services/face/face_recognition_service_native.dart` | MobileFaceNet, crop, embedding, matching |
+| `lib/features/enrollment/presentation/enrollment_screen_native.dart` | Pendaftaran wajah multi-sampel |
+| `lib/features/attendance/presentation/attendance_screen.dart` | Flow presensi, face match, popup sukses |
+| `lib/features/attendance/presentation/camera_face_view_native.dart` | Kamera, deteksi wajah, liveness kedip dev, overlay frame |
+| `lib/features/profile/presentation/face_ai_lab_screen_native.dart` | Lab pengujian similarity |
+| `lib/shared/services/face/face_recognition_service_native.dart` | MobileFaceNet, alignment, crop, embedding, matching |
 | `lib/shared/services/face/embedding_sync_service.dart` | Simpan/sync embedding |
 | `lib/shared/database/embedding_db.dart` | Cache SQLite embedding |
+| `lib/shared/services/attendance_dev_settings.dart` | Switch dev untuk kedip presensi |
 
 ---
 
@@ -415,11 +555,10 @@ File penting terkait wajah:
 flutter pub get
 ```
 
-2. Pastikan model tersedia di `assets/models/`:
+2. Pastikan model tersedia:
 
 ```text
 assets/models/mobilefacenet.tflite
-assets/models/sface.tflite
 ```
 
 3. Pastikan asset terdaftar di `pubspec.yaml`:
@@ -427,7 +566,7 @@ assets/models/sface.tflite
 ```yaml
 flutter:
   assets:
-    - assets/models/sface.tflite
+    - public/
     - assets/models/mobilefacenet.tflite
 ```
 
@@ -440,12 +579,13 @@ flutter run
 5. Urutan tes yang disarankan:
 
 - Login/register user.
-- Buka Profil atau flow enrollment wajah.
-- Daftarkan wajah dengan 1 foto.
-- Buka tab Absen.
-- Tekan `Konfirmasi Check-In`.
-- Coba wajah yang sama dan wajah berbeda.
-- Jika terlalu ketat atau terlalu longgar, kalibrasi threshold Euclidean `1.25` di `FaceRecognitionService`.
+- Buka Profile.
+- Daftarkan wajah sampai selesai.
+- Buka Face AI Lab.
+- Uji wajah sendiri dan wajah orang lain.
+- Buka tab Absensi.
+- Coba check-in dan check-out.
+- Aktifkan atau matikan `Dev: Kedip Saat Presensi` dari Profile untuk membandingkan flow.
 
 ---
 
@@ -453,9 +593,9 @@ flutter run
 
 Beberapa hal yang masih bisa dikembangkan:
 
-- Kalibrasi threshold wajah berdasarkan hasil tes di perangkat fisik.
-- Membersihkan sisa asset/model `sface.tflite` jika sudah tidak dipakai.
+- Membuat liveness challenge production dengan instruksi acak, misalnya kedip, senyum, atau tengok ringan.
+- Menambahkan audit log presensi gagal tanpa menyimpan foto wajah.
+- Kalibrasi threshold dengan dataset 10-30 user lokal.
 - Menambahkan GPS/geofence jika presensi perlu validasi lokasi.
 - Menambahkan role admin yang lebih tegas untuk enrollment karyawan lain.
-- Menambahkan audit log untuk percobaan presensi gagal.
 - Menambahkan pengujian integrasi kamera pada perangkat Android.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../shared/models/app_models.dart';
+import '../../../shared/services/attendance_dev_settings.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/face/embedding_sync_service.dart';
 import '../../../shared/store/app_store.dart';
@@ -17,6 +18,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _controller = ProfileController();
+  final _devSettings = AttendanceDevSettings.instance;
   bool _isEnrolled = false;
   bool _enrollChecked = false;
 
@@ -66,7 +68,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([AppStore.instance, _controller]),
+      listenable: Listenable.merge([
+        AppStore.instance,
+        _controller,
+        _devSettings,
+      ]),
       builder: (context, _) {
         final profile = AppStore.instance.profile;
         return Scaffold(
@@ -571,6 +577,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
             trailing: Switch(
               value: profile.notificationsEnabled,
               onChanged: (val) => _controller.toggleNotifications(enabled: val),
+              activeThumbColor: AppColors.primary,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+          _divider(),
+          _settingRow(
+            icon: Icons.visibility_rounded,
+            iconColor: AppColors.primary,
+            iconBg: AppColors.primaryLight,
+            label: 'Dev: Kedip Saat Presensi',
+            trailing: Switch(
+              value: _devSettings.requireBlinkForAttendance,
+              onChanged: _devSettings.setRequireBlinkForAttendance,
               activeThumbColor: AppColors.primary,
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),

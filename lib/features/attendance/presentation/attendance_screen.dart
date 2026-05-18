@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 
 import '../../../shared/models/app_models.dart';
 import '../../../shared/providers/notification_provider.dart';
+import '../../../shared/services/attendance_dev_settings.dart';
 import '../../../shared/services/attendance_service.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/face/embedding_sync_service.dart';
@@ -30,6 +31,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   static const double _faceMatchThreshold = 0.65;
 
   final _store = AppStore.instance;
+  final _devSettings = AttendanceDevSettings.instance;
   GlobalKey<CameraFaceViewState> _cameraKey = GlobalKey<CameraFaceViewState>();
   bool _processing = false;
   bool _isEnrolled = false;
@@ -71,7 +73,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       backgroundColor: AppColors.background,
       appBar: _buildAppBar(),
       body: ListenableBuilder(
-        listenable: _store,
+        listenable: Listenable.merge([_store, _devSettings]),
         builder: (context, _) {
           if (!_enrollChecked) {
             return const Center(
@@ -83,15 +85,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
               children: [
-                _buildAttendancePanel(),
-                const SizedBox(height: 14),
                 _buildCameraArea(),
-                const SizedBox(height: 14),
-                _buildStatusSummary(),
                 const SizedBox(height: 14),
                 _buildFaceStatus(),
                 const SizedBox(height: 14),
                 _buildActionButton(),
+                const SizedBox(height: 14),
+                _buildStatusSummary(),
               ],
             ),
           );
@@ -197,74 +197,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       return ('Sudah Check-In', AppColors.warning, AppColors.warningLight);
     }
     return ('Belum Hadir', AppColors.missing, AppColors.missingLight);
-  }
-
-  Widget _buildAttendancePanel() {
-    final done = _isCheckedOut;
-    final icon = done
-        ? Icons.task_alt_rounded
-        : _isCheckedIn
-        ? Icons.work_history_rounded
-        : Icons.login_rounded;
-    final color = done
-        ? AppColors.success
-        : _isCheckedIn
-        ? AppColors.warning
-        : AppColors.primary;
-    final title = done
-        ? 'Presensi hari ini selesai'
-        : _isCheckedIn
-        ? 'Check-in sudah tercatat'
-        : 'Siap untuk presensi';
-    final subtitle = done
-        ? 'Kamu sudah check-in dan check-out untuk hari ini.'
-        : _isCheckedIn
-        ? 'Tekan tombol check-out saat pekerjaan hari ini selesai.'
-        : 'Tekan tombol check-in untuk mencatat kehadiran hari ini.';
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.border),
-        boxShadow: _softShadow(),
-      ),
-      child: Column(
-        children: [
-          Container(
-            width: 82,
-            height: 82,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.10),
-              shape: BoxShape.circle,
-              border: Border.all(color: color.withValues(alpha: 0.14)),
-            ),
-            child: Icon(icon, size: 40, color: color),
-          ),
-          const SizedBox(height: 18),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 13,
-              height: 1.45,
-              color: AppColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildStatusSummary() {
@@ -401,6 +333,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Widget _buildCameraArea() {
+    final requireBlink = _devSettings.requireBlinkForAttendance;
     return Container(
       height: 430,
       decoration: BoxDecoration(
@@ -417,9 +350,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             : CameraFaceView(
                 key: _cameraKey,
                 active: widget.isActive,
-                hint: 'Tatap lurus ke kamera',
+                hint: requireBlink
+                    ? 'Kedipkan mata, lalu tatap lurus'
+                    : 'Tatap lurus ke kamera',
                 liveMode: false,
-                enableLiveness: false,
+                enableLiveness: requireBlink,
                 onTimeout: () {
                   _showFaceMatchFailed('Waktu verifikasi habis. Coba ulangi.');
                 },
@@ -532,7 +467,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
     return (
       Icons.face_rounded,
-      'Tekan presensi, lalu tatap lurus ke kamera.',
+      _devSettings.requireBlinkForAttendance
+          ? 'Tekan presensi, kedipkan mata, lalu tatap lurus ke kamera.'
+          : 'Tekan presensi, lalu tatap lurus ke kamera.',
       AppColors.textSecondary,
       AppColors.background,
     );
@@ -757,19 +694,25 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         if (!mounted) return;
         _store.setAttendance(record);
         NotificationProvider.instance.refresh();
-        _showResult(
-          success: true,
-          message: 'Check-in berhasil pukul ${_fmtTod(record.checkIn!)}',
+        await _showAttendanceSuccessDialog(
+          title: 'Check-in Berhasil',
+          message:
+              'Selamat bekerja. Semoga hari ini lancar dan produktif.',
+          timeLabel: 'Check-in pukul ${_fmtTod(record.checkIn!)}',
+          icon: Icons.work_history_rounded,
+          color: AppColors.success,
         );
       } else {
         final record = await AttendanceService.instance.checkOut(uid);
         if (!mounted) return;
         _store.setAttendance(record);
         NotificationProvider.instance.refresh();
-        _showResult(
-          success: true,
-          message: 'Check-out berhasil pukul ${_fmtTod(record.checkOut!)}',
-          color: AppColors.error,
+        await _showAttendanceSuccessDialog(
+          title: 'Check-out Berhasil',
+          message: 'Terima kasih untuk kerja keras hari ini. Selamat pulang.',
+          timeLabel: 'Check-out pukul ${_fmtTod(record.checkOut!)}',
+          icon: Icons.home_rounded,
+          color: AppColors.primary,
         );
       }
     } catch (e) {
@@ -828,6 +771,85 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showAttendanceSuccessDialog({
+    required String title,
+    required String message,
+    required String timeLabel,
+    required IconData icon,
+    required Color color,
+  }) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 26, 24, 20),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.10),
+                shape: BoxShape.circle,
+                border: Border.all(color: color.withValues(alpha: 0.14)),
+              ),
+              child: Icon(icon, color: color, size: 34),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.45,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Text(
+                timeLabel,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Oke'),
               ),
             ),
           ],

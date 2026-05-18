@@ -1,65 +1,92 @@
-# FaceWork Tracker
+# Presensia
 
-FaceWork Tracker adalah aplikasi Flutter untuk presensi karyawan berbasis pengenalan wajah, pencatatan pekerjaan harian, kalender kehadiran, dan laporan performa.
+Presensia adalah aplikasi Flutter untuk presensi karyawan berbasis pengenalan wajah, tracker pekerjaan harian, kalender kehadiran, dan laporan performa.
 
-Project ini memakai kamera perangkat, ML Kit Face Detection, MobileFaceNet TFLite, SQLite lokal, dan Supabase sebagai backend utama.
+Project ini memakai kamera perangkat, Google ML Kit Face Detection, MobileFaceNet TFLite, SQLite lokal untuk cache embedding, dan Supabase sebagai backend utama.
 
 ## Fitur Utama
 
-- Login, register, reset password, dan session auth dengan Supabase.
-- Enrollment wajah 1 kali menggunakan 1 foto wajah.
-- Satu akun hanya boleh memiliki satu wajah aktif.
-- Wajah yang sudah terdaftar di akun lain tidak boleh dipakai untuk enrollment akun berbeda.
-- Check-in dan check-out melalui tombol konfirmasi.
-- Frame wajah muncul saat proses scan/verifikasi berlangsung.
-- Analisis wajah dengan beberapa sampel sebelum presensi dinyatakan gagal.
-- Popup sukses check-in dengan pesan penyemangat kerja.
-- Popup sukses check-out dengan pesan istirahat.
+- Auth Supabase: login, register, reset password, dan session.
+- Pendaftaran wajah menggunakan multi-sampel dari kamera.
+- Face alignment berbasis landmark mata sebelum masuk ke MobileFaceNet.
+- Penyimpanan beberapa embedding referensi per user untuk meningkatkan akurasi.
+- Presensi check-in dan check-out dengan verifikasi wajah.
+- Switch dev di Profile untuk mengaktifkan atau menonaktifkan kedip saat presensi.
+- Face AI Lab untuk menguji foto dari galeri/kamera terhadap data wajah terdaftar.
+- Popup sukses check-in dengan pesan semangat kerja.
+- Popup sukses check-out dengan pesan selamat pulang.
 - Tracker project dan worklog harian.
 - Kalender presensi, worklog, izin/libur, dan marker tanggal.
 - Laporan performa dan export PDF.
 - Reminder lokal untuk check-in/check-out.
 
-## Alur Presensi Wajah
+## Pipeline Wajah
 
-### Enrollment
+### Pendaftaran Wajah
 
 ```text
-Buka halaman pendaftaran wajah
-  -> arahkan wajah ke kamera
-  -> ambil 1 foto
-  -> ML Kit mendeteksi wajah
-  -> crop wajah dari bounding box
-  -> resize ke 112x112
+Buka Daftarkan Wajah
+  -> kamera aktif
+  -> user mengikuti tahap frontal, kiri ringan, dan kanan ringan
+  -> sistem mengambil total 9 sampel valid
+  -> ML Kit mendeteksi wajah, landmark, pose, dan kualitas dasar
+  -> wajah di-align berdasarkan posisi mata
+  -> crop wajah dan resize ke 112x112
   -> MobileFaceNet membuat embedding 192 dimensi
-  -> Supabase mengecek wajah ini belum dipakai akun lain
-  -> embedding disimpan untuk user tersebut
+  -> embedding dinormalisasi L2
+  -> sistem menyimpan 6 embedding referensi:
+       frontal avg, frontal best,
+       kiri avg, kiri best,
+       kanan avg, kanan best
+  -> embedding disimpan lokal dan disinkronkan ke Supabase
 ```
 
-### Check-In / Check-Out
+Strategi 6 embedding dipakai agar presensi tetap kuat untuk wajah frontal, tetapi masih toleran terhadap sedikit variasi pose.
+
+### Presensi Check-In / Check-Out
 
 ```text
-Tekan Konfirmasi Check-In atau Konfirmasi Check-Out
-  -> kamera mulai scan
-  -> frame muncul jika wajah terdeteksi
-  -> aplikasi menampilkan proses analisis
-  -> wajah dicocokkan dengan embedding yang sudah terdaftar
-  -> jika cocok, presensi sukses
-  -> jika tidak cocok setelah beberapa sampel, presensi gagal
+Buka tab Absensi
+  -> tekan tombol presensi
+  -> kamera memverifikasi wajah
+  -> jika switch dev kedip aktif, user diminta kedip dulu
+  -> sistem mengambil frame terbaik
+  -> ML Kit mendeteksi wajah dan quality gate
+  -> face alignment + crop + resize 112x112
+  -> MobileFaceNet membuat query embedding
+  -> query dibandingkan ke 6 embedding referensi user
+  -> skor tertinggi dipakai sebagai hasil akhir
+  -> jika cosine similarity >= 0.65, presensi berhasil
 ```
 
-Saat presensi sukses, frame scan akan hilang lagi. Frame akan muncul kembali ketika user menekan tombol konfirmasi presensi berikutnya.
+Saat presensi berhasil, aplikasi menampilkan popup sukses. Check-in memberi pesan semangat kerja, sedangkan check-out memberi pesan selamat pulang.
+
+### Face AI Lab
+
+Face AI Lab tersedia dari Profile untuk membantu debugging dan kalibrasi sebelum liveness presensi difinalkan.
+
+Lab memakai embedding hasil pendaftaran wajah sebagai target, lalu user bisa memilih foto uji dari galeri atau kamera. Hasil yang ditampilkan meliputi:
+
+- Cosine similarity.
+- Status threshold 0.65, 0.70, dan 0.75.
+- Quality score.
+- Pose Euler X/Y/Z.
+- Ukuran wajah.
+- Inference time.
+- Distance.
+- Best target dari 6 embedding referensi.
 
 ## Teknologi
 
-- Flutter
-- Dart
+- Flutter / Dart
 - Supabase
 - Camera
 - Google ML Kit Face Detection
 - TFLite Flutter
 - MobileFaceNet
 - SQLite / sqflite
+- Image processing dengan package `image`
+- Image picker
 - PDF dan Printing
 - Local Notifications
 
@@ -68,13 +95,13 @@ Saat presensi sukses, frame scan akan hilang lagi. Frame akan muncul kembali ket
 ```text
 lib/
   features/
-    attendance/      # UI presensi dan kamera
+    attendance/      # UI presensi, kamera, dan flow face match
     auth/            # login, register, reset password, splash
     calendar/        # kalender kehadiran dan worklog
     enrollment/      # pendaftaran wajah
     home/            # dashboard utama
     main_nav/        # navigasi utama aplikasi
-    profile/         # profil user
+    profile/         # profil, Face AI Lab, dan dev switch
     report/          # laporan dan export PDF
     tracker/         # project dan worklog
   shared/
@@ -88,7 +115,6 @@ lib/
 assets/
   models/
     mobilefacenet.tflite
-    sface.tflite
 
 supabase/
   schema.sql
@@ -98,9 +124,9 @@ supabase/
 
 - Flutter SDK sesuai environment project.
 - Android Studio atau VS Code dengan Flutter plugin.
-- Perangkat Android fisik disarankan untuk kamera dan ML Kit.
+- Perangkat Android fisik sangat disarankan untuk kamera dan ML Kit.
 - Project Supabase aktif.
-- Model TFLite tersedia di `assets/models/`.
+- Model MobileFaceNet tersedia di `assets/models/mobilefacenet.tflite`.
 
 ## Setup Project
 
@@ -116,11 +142,10 @@ cd face_recognizer
 flutter pub get
 ```
 
-3. Pastikan asset model sudah ada.
+3. Pastikan asset model tersedia.
 
 ```text
 assets/models/mobilefacenet.tflite
-assets/models/sface.tflite
 ```
 
 4. Pastikan asset sudah terdaftar di `pubspec.yaml`.
@@ -128,7 +153,7 @@ assets/models/sface.tflite
 ```yaml
 flutter:
   assets:
-    - assets/models/sface.tflite
+    - public/
     - assets/models/mobilefacenet.tflite
 ```
 
@@ -140,7 +165,7 @@ Jalankan isi file berikut di Supabase SQL Editor:
 supabase/schema.sql
 ```
 
-6. Pastikan konfigurasi Supabase sudah sesuai di:
+6. Pastikan konfigurasi Supabase sesuai di:
 
 ```text
 lib/shared/services/supabase_client.dart
@@ -155,37 +180,52 @@ flutter run
 ## Cara Uji Manual
 
 1. Register atau login.
-2. Lengkapi profil jika diperlukan.
-3. Buka halaman pendaftaran wajah.
-4. Daftarkan wajah 1 kali.
-5. Buka tab Absen.
-6. Tekan `Konfirmasi Check-In`.
-7. Arahkan wajah yang sama ke kamera.
-8. Tunggu proses analisis sampai presensi sukses.
-9. Coba `Konfirmasi Check-Out` dengan flow yang sama.
+2. Buka Profile.
+3. Buka `Daftarkan Wajah`.
+4. Ikuti tahap pendaftaran wajah sampai selesai.
+5. Buka `Face AI Lab` dari Profile.
+6. Uji beberapa foto sendiri dan foto orang lain untuk melihat margin similarity.
+7. Buka tab `Absensi`.
+8. Tekan tombol presensi untuk check-in.
+9. Arahkan wajah ke kamera.
+10. Jika switch dev kedip aktif, kedipkan mata saat diminta.
+11. Pastikan popup check-in berhasil muncul.
+12. Lakukan check-out dengan flow yang sama.
 
-Untuk menguji kasus gagal, gunakan wajah berbeda atau kondisi wajah yang tidak sesuai dengan enrollment.
+Untuk menguji kasus gagal, gunakan wajah berbeda atau foto dengan kondisi yang sengaja buruk. Berdasarkan uji terakhir, wajah asli bisa mencapai sekitar 87% similarity, sedangkan wajah berbeda berada jauh lebih rendah, sekitar 40% pada pengujian manual.
 
 ## Catatan Face Recognition
 
-- Face detection memakai ML Kit.
+- Face detection memakai Google ML Kit.
 - Face embedding memakai MobileFaceNet.
-- Input model menggunakan ukuran `112x112`.
+- Input model menggunakan crop wajah `112x112`.
 - Output embedding berukuran 192 dimensi.
-- Matching memakai Euclidean distance.
-- Threshold saat ini memakai nilai `1.25`.
-- Jika wajah tidak cocok, sistem mencoba maksimal beberapa sampel sebelum menggagalkan presensi.
+- Embedding dinormalisasi L2.
+- Matching utama memakai cosine similarity.
+- Presensi membandingkan query embedding ke semua embedding referensi milik user, lalu mengambil skor tertinggi.
+- Threshold presensi saat ini memakai cosine similarity `0.65`.
+- Face alignment wajib dijaga konsisten antara enrollment, Face AI Lab, dan presensi.
+- Face AI Lab dipakai untuk kalibrasi threshold sebelum liveness final dirapikan.
 - Presensi hanya mencocokkan wajah terhadap embedding milik akun yang sedang login.
 - Jika SQLite belum punya embedding akun tersebut, aplikasi mengambil backup dari Supabase lalu menyimpannya kembali ke SQLite.
-- Enrollment memakai RPC Supabase `find_duplicate_face_owner` untuk mencegah satu wajah dipakai di beberapa akun.
 
-Nilai threshold bisa dikalibrasi lagi jika hasil di perangkat nyata terlalu ketat atau terlalu longgar.
+## Dev Switch Liveness
+
+Di Profile tersedia switch:
+
+```text
+Dev: Kedip Saat Presensi
+```
+
+Jika mati, presensi langsung melakukan face match setelah user menatap kamera.
+
+Jika aktif, presensi meminta user kedip terlebih dahulu sebelum face match. Switch ini dibuat untuk tahap pengembangan dan belum dimaksudkan sebagai konfigurasi production final.
 
 ## Platform
 
 Target utama project saat ini adalah Android/native.
 
-Web masih memakai stub untuk fitur kamera/face recognition, sehingga flow presensi wajah tidak ditujukan untuk browser.
+Web masih memakai stub untuk fitur kamera dan face recognition, sehingga flow presensi wajah tidak ditujukan untuk browser.
 
 ## Dokumentasi Konsep
 
@@ -200,15 +240,18 @@ Konsep_Projek.md
 Project sudah memiliki alur inti untuk:
 
 - Auth Supabase.
-- Enrollment wajah 1 foto.
+- Enrollment wajah multi-sampel.
 - Presensi check-in/check-out dengan verifikasi wajah.
+- Face AI Lab untuk debugging dan kalibrasi.
 - Penyimpanan embedding lokal dan sync ke Supabase.
 - Tracker worklog.
 - Kalender.
 - Laporan PDF.
+- Popup sukses presensi.
 
-Fitur yang belum menjadi flow utama:
+Fitur yang belum menjadi flow final:
 
+- Liveness challenge production.
 - GPS presensi.
 - Face recognition di web.
 - Panel admin penuh untuk HR.
