@@ -89,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 builder: (context, constraints) {
                   final height = constraints.maxHeight;
                   final panelTop = keyboardOpen
-                      ? (height * 0.40).clamp(210.0, 280.0)
+                      ? (height * 0.38).clamp(198.0, 264.0)
                       : (height * 0.54).clamp(330.0, 420.0);
 
                   return Stack(
@@ -208,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
         child: AnimatedPadding(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOutCubic,
-          padding: EdgeInsets.fromLTRB(28, keyboardOpen ? 14 : 24, 28, 24),
+          padding: EdgeInsets.fromLTRB(28, keyboardOpen ? 30 : 24, 28, 24),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 430),

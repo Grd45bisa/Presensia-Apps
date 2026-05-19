@@ -43,9 +43,9 @@ class FaceRecognitionService {
   static const String _modelAsset = 'assets/models/mobilefacenet.tflite';
   static const bool _logFaceRecognition = false;
 
-  // Cosine similarity threshold for L2-normalized face embeddings.
-  // Tune this with real attendance samples if false accepts/rejects shift.
-  static const double _cosineThreshold = 0.93;
+  // Attendance working point for L2-normalized embeddings. Duplicate-face
+  // enrollment checks stay stricter in EmbeddingSyncService.
+  static const double _cosineThreshold = 0.65;
 
   int _inputSize = 0;
   int _embeddingSize = 0;

@@ -50,7 +50,7 @@ class LiveFaceDetectionResult {
 }
 
 typedef FaceDetectedCallback =
-    Future<void> Function({
+    Future<bool> Function({
       required img.Image fullImage,
       required dynamic inputImage,
       required Uint8List? nv21Bytes,

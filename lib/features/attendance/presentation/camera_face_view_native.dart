@@ -56,7 +56,7 @@ class LiveFaceDetectionResult {
 }
 
 typedef FaceDetectedCallback =
-    Future<void> Function({
+    Future<bool> Function({
       required img.Image fullImage,
       required InputImage inputImage,
       required Uint8List? nv21Bytes,
@@ -206,6 +206,7 @@ class CameraFaceViewState extends State<CameraFaceView>
 
   Future<void> _releaseCamera() async {
     await _stopScan();
+    _clearVisibleFaces();
     final ctrl = _controller;
     _controller = null;
     if (ctrl != null) {
@@ -309,6 +310,7 @@ class CameraFaceViewState extends State<CameraFaceView>
   Future<void> pauseLiveStream() async {
     final ctrl = _controller;
     _processingFrame = false;
+    _clearVisibleFaces();
     if (ctrl == null ||
         !ctrl.value.isInitialized ||
         !ctrl.value.isStreamingImages) {
@@ -443,6 +445,7 @@ class CameraFaceViewState extends State<CameraFaceView>
     _scanning = true;
     _processingFrame = false;
     _countdown = _timeoutSec;
+    _clearVisibleFaces();
     _resetLiveness();
     setState(() => _state = CameraFaceState.scanning);
 
@@ -468,6 +471,7 @@ class CameraFaceViewState extends State<CameraFaceView>
     _timeoutTimer = null;
     _scanning = false;
     _processingFrame = false;
+    _clearVisibleFaces();
 
     final ctrl = _controller;
     if (ctrl != null &&
@@ -556,23 +560,29 @@ class CameraFaceViewState extends State<CameraFaceView>
         qualityScore: quality.score,
       );
 
-      _scanning = false;
-      _timeoutTimer?.cancel();
-      _timeoutTimer = null;
-      unawaited(_stopScan());
-
-      if (mounted) setState(() => _state = CameraFaceState.detected);
-
       try {
-        await widget.onFaceDetected?.call(
-          fullImage: best.fullImage,
-          inputImage: best.inputImage,
-          nv21Bytes: best.nv21Bytes,
-          rawWidth: best.rawWidth,
-          rawHeight: best.rawHeight,
-          rotation: best.rotation,
-          face: best.face,
-        );
+        final shouldStop =
+            await widget.onFaceDetected?.call(
+              fullImage: best.fullImage,
+              inputImage: best.inputImage,
+              nv21Bytes: best.nv21Bytes,
+              rawWidth: best.rawWidth,
+              rawHeight: best.rawHeight,
+              rotation: best.rotation,
+              face: best.face,
+            ) ??
+            false;
+        if (!shouldStop) return;
+
+        _scanning = false;
+        _timeoutTimer?.cancel();
+        _timeoutTimer = null;
+        _clearVisibleFaces();
+        unawaited(_stopScan());
+
+        if (mounted && _state != CameraFaceState.done) {
+          setState(() => _state = CameraFaceState.detected);
+        }
       } catch (_) {
         if (mounted) resetToReady();
       }
@@ -595,6 +605,21 @@ class CameraFaceViewState extends State<CameraFaceView>
       _visibleImageSize = imageSize;
       _visibleRotation = rotation;
     });
+  }
+
+  void _clearVisibleFaces() {
+    if (_visibleFaces.isEmpty &&
+        _visibleImageSize == null &&
+        _visibleRotation == null) {
+      return;
+    }
+
+    _visibleFaces = const [];
+    _visibleImageSize = null;
+    _visibleRotation = null;
+
+    if (!mounted || _disposed) return;
+    setState(() {});
   }
 
   InputImage? _buildInputImage(CameraImage image) {
@@ -785,6 +810,7 @@ class CameraFaceViewState extends State<CameraFaceView>
 
   void _onTimeout() {
     unawaited(_stopScan());
+    _clearVisibleFaces();
     if (!mounted) return;
     setState(() => _state = CameraFaceState.timeout);
     widget.onTimeout?.call();
@@ -798,19 +824,21 @@ class CameraFaceViewState extends State<CameraFaceView>
       _countdown = _timeoutSec;
     });
     _resetLiveness();
-    _updateVisibleFaces(const [], null, null);
+    _clearVisibleFaces();
     // Live mode: restart stream setelah reset.
     if (widget.liveMode) unawaited(_startLiveStream());
   }
 
   void markDone() {
     unawaited(_stopScan());
+    _clearVisibleFaces();
     if (!mounted) return;
     setState(() => _state = CameraFaceState.done);
   }
 
   Future<void> refreshCamera() async {
     await _stopScan();
+    _clearVisibleFaces();
     final ctrl = _controller;
     _controller = null;
     if (mounted) {
@@ -827,6 +855,7 @@ class CameraFaceViewState extends State<CameraFaceView>
 
   Future<void> _disposeController(CameraController ctrl) async {
     await _stopScan();
+    _clearVisibleFaces();
     if (_controller == ctrl) _controller = null;
     try {
       await ctrl.dispose();
@@ -1006,6 +1035,9 @@ class CameraFaceViewState extends State<CameraFaceView>
 
         final isScanning = _state == CameraFaceState.scanning;
         final isDetected = _state == CameraFaceState.detected;
+        final trackedFaces = (widget.liveMode || isScanning)
+            ? _visibleFaces
+            : const <Face>[];
         return Stack(
           fit: StackFit.expand,
           children: [
@@ -1019,7 +1051,7 @@ class CameraFaceViewState extends State<CameraFaceView>
             ),
             CustomPaint(
               painter: _FaceFramePainter(
-                faces: _visibleFaces,
+                faces: trackedFaces,
                 imageSize: _visibleImageSize,
                 rotation: _visibleRotation,
                 isFrontCamera:

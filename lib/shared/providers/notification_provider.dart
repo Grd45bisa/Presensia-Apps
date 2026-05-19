@@ -195,13 +195,11 @@ class NotificationProvider extends ChangeNotifier {
   /// Untuk setiap item yang belum pernah di-push ke OS, kirim via
   /// [NotificationService.showNow]. Hanya high & medium priority yang
   /// di-push agar tidak terlalu banyak notifikasi.
-  void _pushNewToOs() {
+  Future<void> _pushNewToOs() async {
     final items = compute();
     for (final n in items) {
       if (_pushedToOs.contains(n.id)) continue;
       if (n.priority == NotificationPriority.low) continue;
-
-      _pushedToOs.add(n.id);
 
       final channel = switch (n.category) {
         NotificationCategory.attendance => NotifChannel.attendance,
@@ -210,12 +208,15 @@ class NotificationProvider extends ChangeNotifier {
         _                              => NotifChannel.system,
       };
 
-      NotificationService.instance.showNow(
-        id: n.id.hashCode & 0x7FFFFFFF,
-        title: n.title,
-        body: n.subtitle ?? n.timeLabel,
-        channel: channel,
-      );
+      try {
+        await NotificationService.instance.showNow(
+          id: n.id.hashCode & 0x7FFFFFFF,
+          title: n.title,
+          body: n.subtitle ?? n.timeLabel,
+          channel: channel,
+        );
+        _pushedToOs.add(n.id);
+      } catch (_) {}
     }
   }
 

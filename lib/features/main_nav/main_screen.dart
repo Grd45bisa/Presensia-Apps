@@ -72,7 +72,10 @@ class _MainScreenState extends State<MainScreen>
           // AttendanceScreen menerima isActive=true HANYA saat tab Absensi
           // sedang dipilih, sehingga kamera tidak boot lebih awal saat user
           // masih di Home/Tracker, dan otomatis re-init saat user kembali.
-          AttendanceScreen(isActive: _currentIndex == 2),
+          AttendanceScreen(
+            isActive: _currentIndex == 2,
+            onAttendanceSuccessDismissed: () => _onTabSelected(0),
+          ),
           const CalendarScreen(),
           const ReportScreen(),
         ],

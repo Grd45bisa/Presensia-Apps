@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(magick *)",
+      "Bash(python *)",
+      "Bash(copy *)",
+      "Bash(del *)",
+      "Bash(start *)",
+      "Bash(flutter *)"
+    ]
+  },
+  "$version": 4
+}

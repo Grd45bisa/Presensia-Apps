@@ -7,6 +7,7 @@ import '../services/reminder_service.dart';
 import '../services/schedule_settings_service.dart';
 import '../services/profile_service.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 
 class AppStore extends ChangeNotifier {
   static final AppStore instance = AppStore._();
@@ -42,6 +43,7 @@ class AppStore extends ChangeNotifier {
   void setProfile(EmployeeProfile profile) {
     _profile = profile;
     notifyListeners();
+    _refreshBackgroundReminders();
   }
 
   // ─── SETTINGS ─────────────────────────────────────────────────────────────
@@ -53,12 +55,14 @@ class AppStore extends ChangeNotifier {
     _settings = s;
     notifyListeners();
     _persistSettings();
+    _refreshBackgroundReminders();
   }
 
   /// Apply settings that already came from the DB (no re-persist needed).
   void applyRemoteSettings(WorkScheduleSettings s) {
     _settings = s;
     notifyListeners();
+    _refreshBackgroundReminders();
   }
 
   /// Signal that the projects list changed (realtime event).
@@ -85,11 +89,13 @@ class AppStore extends ChangeNotifier {
   void setAttendance(AttendanceRecord record) {
     _attendance[dateKey(record.date)] = record;
     notifyListeners();
+    _refreshBackgroundReminders();
   }
 
   void removeAttendance(DateTime date) {
     _attendance.remove(dateKey(date));
     notifyListeners();
+    _refreshBackgroundReminders();
   }
 
   // ─── WORKLOGS ─────────────────────────────────────────────────────────────
@@ -109,6 +115,7 @@ class AppStore extends ChangeNotifier {
     final key = dateKey(entry.date);
     _worklogs[key] = [...(_worklogs[key] ?? []), entry];
     notifyListeners();
+    _refreshBackgroundReminders();
   }
 
   void upsertWorklog(WorklogEntry entry) {
@@ -126,11 +133,13 @@ class AppStore extends ChangeNotifier {
     final key = dateKey(entry.date);
     _worklogs[key] = [...(_worklogs[key] ?? []), entry];
     notifyListeners();
+    _refreshBackgroundReminders();
   }
 
   void setWorklogsForDay(DateTime date, List<WorklogEntry> entries) {
     _worklogs[dateKey(date)] = entries;
     notifyListeners();
+    _refreshBackgroundReminders();
   }
 
   void removeWorklog(String id) {
@@ -147,7 +156,10 @@ class AppStore extends ChangeNotifier {
         }
       }
     }
-    if (changed) notifyListeners();
+    if (changed) {
+      notifyListeners();
+      _refreshBackgroundReminders();
+    }
   }
 
   // ─── REMINDERS ────────────────────────────────────────────────────────────
@@ -161,6 +173,7 @@ class AppStore extends ChangeNotifier {
     final key = dateKey(event.startDateTime);
     _reminders[key] = [...(_reminders[key] ?? []), event];
     notifyListeners();
+    NotificationService.instance.scheduleReminder(event);
   }
 
   void updateReminder(ReminderEvent event) {
@@ -174,6 +187,7 @@ class AppStore extends ChangeNotifier {
         ...list.sublist(idx + 1),
       ];
       notifyListeners();
+      NotificationService.instance.scheduleReminder(event);
     }
   }
 
@@ -183,6 +197,7 @@ class AppStore extends ChangeNotifier {
         .where((e) => e.id != event.id)
         .toList();
     notifyListeners();
+    NotificationService.instance.cancelReminder(event);
   }
 
   // ─── CLOUD LOAD ───────────────────────────────────────────────────────────
@@ -233,6 +248,8 @@ class AppStore extends ChangeNotifier {
     } finally {
       _loading = false;
       notifyListeners();
+      _refreshCalendarReminderSchedules();
+      _refreshBackgroundReminders();
     }
   }
 
@@ -260,6 +277,7 @@ class AppStore extends ChangeNotifier {
     }
 
     notifyListeners();
+    _refreshCalendarReminderSchedules();
   }
 
   /// Clear all in-memory state (called on logout).
@@ -270,6 +288,25 @@ class AppStore extends ChangeNotifier {
     _worklogs.clear();
     _reminders.clear();
     notifyListeners();
+    NotificationService.instance.cancelBackgroundFallbackReminders();
+  }
+
+  void _refreshBackgroundReminders() {
+    final enabled = _profile?.notificationsEnabled ?? true;
+    NotificationService.instance.refreshBackgroundFallbackReminders(
+      settings: _settings,
+      enabled: enabled,
+    );
+  }
+
+  void _refreshCalendarReminderSchedules() {
+    final enabled = _profile?.notificationsEnabled ?? true;
+    if (!enabled) return;
+    for (final list in _reminders.values) {
+      for (final reminder in list) {
+        NotificationService.instance.scheduleReminder(reminder);
+      }
+    }
   }
 
   // ─── DERIVED DAY STATE ────────────────────────────────────────────────────

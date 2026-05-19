@@ -20,8 +20,13 @@ import 'camera_face_view.dart';
 
 class AttendanceScreen extends StatefulWidget {
   final bool isActive;
+  final VoidCallback? onAttendanceSuccessDismissed;
 
-  const AttendanceScreen({super.key, this.isActive = true});
+  const AttendanceScreen({
+    super.key,
+    this.isActive = true,
+    this.onAttendanceSuccessDismissed,
+  });
 
   @override
   State<AttendanceScreen> createState() => _AttendanceScreenState();
@@ -29,6 +34,7 @@ class AttendanceScreen extends StatefulWidget {
 
 class _AttendanceScreenState extends State<AttendanceScreen> {
   static const double _faceMatchThreshold = 0.65;
+  static const int _verificationSampleTarget = 5;
 
   final _store = AppStore.instance;
   final _devSettings = AttendanceDevSettings.instance;
@@ -41,6 +47,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   bool _matchFailed = false;
   double? _lastSimilarity;
   String? _bestTarget;
+  int _verificationSamples = 0;
+  _StoredMatch? _bestVerificationMatch;
 
   DateTime get _today =>
       DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
@@ -536,6 +544,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       _matchFailed = false;
       _lastSimilarity = null;
       _bestTarget = null;
+      _verificationSamples = 0;
+      _bestVerificationMatch = null;
     });
 
     final started = _cameraKey.currentState?.startScan() ?? false;
@@ -548,7 +558,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
   }
 
-  Future<void> _onFaceDetectedForAttendance({
+  Future<bool> _onFaceDetectedForAttendance({
     required img.Image fullImage,
     required Uint8List? nv21Bytes,
     required int rawWidth,
@@ -556,20 +566,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     required InputImageRotation rotation,
     required Face face,
   }) async {
-    if (_processing || _isCheckedOut) return;
+    if (_processing || _isCheckedOut) return true;
 
     try {
       final uid = AuthService.instance.currentUserId;
-      if (uid == null) return;
+      if (uid == null) return true;
 
       final stored = await EmbeddingSyncService.instance.getEmbeddings(uid);
       if (stored == null || stored.isEmpty) {
-        if (!mounted) return;
+        if (!mounted) return true;
         setState(() {
           _isEnrolled = false;
           _checkingFace = false;
         });
-        return;
+        return true;
       }
 
       final query = await FaceRecognitionService.instance.extractEmbedding(
@@ -577,20 +587,29 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         face,
       );
       if (query == null || query.isEmpty) {
-        _showFaceMatchFailed('Wajah tidak terbaca dengan jelas.');
-        return;
+        return false;
       }
 
       final match = _bestStoredMatch(query, stored);
-      _lastSimilarity = match.similarity;
-      _bestTarget = match.label;
-
-      if (match.similarity < _faceMatchThreshold) {
-        _showFaceMatchFailed('Wajah tidak cocok dengan data terdaftar.');
-        return;
+      _verificationSamples++;
+      if (_bestVerificationMatch == null ||
+          match.similarity > _bestVerificationMatch!.similarity) {
+        _bestVerificationMatch = match;
       }
 
-      if (!mounted) return;
+      final best = _bestVerificationMatch!;
+      _lastSimilarity = best.similarity;
+      _bestTarget = '${best.label} / frame $_verificationSamples';
+
+      if (match.similarity < _faceMatchThreshold) {
+        if (_verificationSamples >= _verificationSampleTarget) {
+          _showFaceMatchFailed('Wajah tidak cocok dengan data terdaftar.');
+          return true;
+        }
+        return false;
+      }
+
+      if (!mounted) return true;
       setState(() {
         _checkingFace = false;
         _faceMatched = true;
@@ -598,8 +617,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       await Future.delayed(const Duration(milliseconds: 350));
       await _manualCheckInOrOut(source: AttendanceSource.face);
       _cameraKey.currentState?.markDone();
+      return true;
+    } on QualityFilterException {
+      return false;
     } catch (e) {
       _showFaceMatchFailed('Presensi wajah gagal. Coba lagi.');
+      return true;
     }
   }
 
@@ -856,6 +879,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         ),
       ),
     );
+    if (!mounted) return;
+    widget.onAttendanceSuccessDismissed?.call();
   }
 
   List<BoxShadow> _softShadow() => [
