@@ -32,6 +32,7 @@ class _ReportScreenState extends State<ReportScreen> {
 
   bool _isLoading = true;
   String? _errorMessage;
+  int _loadSerial = 0;
 
   @override
   void initState() {
@@ -45,8 +46,11 @@ class _ReportScreenState extends State<ReportScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final safeBottom = MediaQuery.of(context).padding.bottom;
-    final contentBottomPadding = safeBottom + 112.0;
+    final media = MediaQuery.of(context);
+    final systemBottom = media.padding.bottom > 0
+        ? media.padding.bottom
+        : media.viewPadding.bottom;
+    final contentBottomPadding = systemBottom + 112.0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -54,12 +58,13 @@ class _ReportScreenState extends State<ReportScreen> {
         backgroundColor: AppColors.surface,
         elevation: 0,
         automaticallyImplyLeading: false,
+        surfaceTintColor: Colors.transparent,
         title: const Text(
           'Laporan',
           style: TextStyle(
             color: AppColors.textPrimary,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
+            fontWeight: FontWeight.w900,
+            fontSize: 18,
           ),
         ),
         actions: [
@@ -106,9 +111,9 @@ class _ReportScreenState extends State<ReportScreen> {
               const SizedBox(height: 14),
               _buildStatsGrid(_reportData),
               const SizedBox(height: 14),
-              _buildBarChartCard(_reportData),
+              RepaintBoundary(child: _buildBarChartCard(_reportData)),
               const SizedBox(height: 14),
-              _buildDistributionCard(_reportData),
+              RepaintBoundary(child: _buildDistributionCard(_reportData)),
               const SizedBox(height: 14),
               _buildInsightCard(_reportData),
             ],
@@ -276,7 +281,8 @@ class _ReportScreenState extends State<ReportScreen> {
 
   Widget _heroMetric(String label, String value, IconData icon) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      constraints: const BoxConstraints(minHeight: 98),
+      padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
         color: const Color(0x1AFFFFFF),
         borderRadius: BorderRadius.circular(14),
@@ -287,12 +293,17 @@ class _ReportScreenState extends State<ReportScreen> {
         children: [
           Icon(icon, size: 16, color: Colors.white),
           const SizedBox(height: 10),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 15,
+              ),
             ),
           ),
           const SizedBox(height: 2),
@@ -427,43 +438,57 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   Widget _buildStatsGrid(_ReportRangeData data) {
-    return GridView.count(
-      crossAxisCount: 2,
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
-      childAspectRatio: 1.3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: [
-        _buildStatCard(
-          'Hari Hadir',
-          '${data.presentDays} / ${data.workdayTarget}',
-          Icons.calendar_today_rounded,
-          AppColors.success,
-          '${data.attendanceRateLabel} dari target kerja',
-        ),
-        _buildStatCard(
-          'Total Jam',
-          _formatDurationCompact(data.totalWorkDuration),
-          Icons.schedule_rounded,
-          AppColors.primary,
-          '${data.totalEntries} aktivitas kerja tercatat',
-        ),
-        _buildStatCard(
-          'Ketepatan',
-          data.punctualityLabel,
-          Icons.alarm_on_rounded,
-          AppColors.warning,
-          '${data.onTimeCount}/${data.daysWithCheckIn} hari datang tepat waktu',
-        ),
-        _buildStatCard(
-          'Rata-rata',
-          data.averageWorkHoursLabel,
-          Icons.insights_rounded,
-          AppColors.primaryDark,
-          'Jam kerja rata-rata per hari aktif',
-        ),
-      ],
+    final items = [
+      (
+        label: 'Hari Hadir',
+        value: '${data.presentDays} / ${data.workdayTarget}',
+        icon: Icons.calendar_today_rounded,
+        color: AppColors.success,
+        helper: '${data.attendanceRateLabel} dari target kerja',
+      ),
+      (
+        label: 'Total Jam',
+        value: _formatDurationCompact(data.totalWorkDuration),
+        icon: Icons.schedule_rounded,
+        color: AppColors.primary,
+        helper: '${data.totalEntries} aktivitas kerja tercatat',
+      ),
+      (
+        label: 'Ketepatan',
+        value: data.punctualityLabel,
+        icon: Icons.alarm_on_rounded,
+        color: AppColors.warning,
+        helper: '${data.onTimeCount}/${data.daysWithCheckIn} hari tepat waktu',
+      ),
+      (
+        label: 'Rata-rata',
+        value: data.averageWorkHoursLabel,
+        icon: Icons.insights_rounded,
+        color: AppColors.primaryDark,
+        helper: 'Jam kerja rata-rata per hari aktif',
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cardWidth = (constraints.maxWidth - 10) / 2;
+        return Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: items.map((item) {
+            return SizedBox(
+              width: cardWidth,
+              child: _buildStatCard(
+                item.label,
+                item.value,
+                item.icon,
+                item.color,
+                item.helper,
+              ),
+            );
+          }).toList(),
+        );
+      },
     );
   }
 
@@ -475,7 +500,8 @@ class _ReportScreenState extends State<ReportScreen> {
     String helper,
   ) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      constraints: const BoxConstraints(minHeight: 126),
+      padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
@@ -504,20 +530,27 @@ class _ReportScreenState extends State<ReportScreen> {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 17,
-              color: color,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 17,
+                color: color,
+              ),
             ),
           ),
           const SizedBox(height: 2),
           Text(
             label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontSize: 11,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
             ),
           ),
@@ -594,85 +627,110 @@ class _ReportScreenState extends State<ReportScreen> {
             style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 18),
-          SizedBox(
-            height: 190,
-            child: BarChart(
-              BarChartData(
-                alignment: BarChartAlignment.spaceAround,
-                maxY: chartMaxY,
-                barTouchData: BarTouchData(enabled: false),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: chartMaxY <= 4 ? 2 : 4,
-                  getDrawingHorizontalLine: (_) =>
-                      const FlLine(color: AppColors.border, strokeWidth: 1),
-                ),
-                titlesData: FlTitlesData(
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      interval: chartMaxY <= 4 ? 2 : 4,
-                      reservedSize: 30,
-                      getTitlesWidget: (value, _) => Text(
-                        '${value.toInt()}j',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: AppColors.textSecondary,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final chartWidth = data.buckets.length <= 5
+                  ? constraints.maxWidth
+                  : data.buckets.length * 58.0;
+              final barWidth = data.buckets.length > 8 ? 16.0 : 22.0;
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                child: SizedBox(
+                  width: chartWidth.clamp(constraints.maxWidth, 1000.0),
+                  height: 190,
+                  child: BarChart(
+                    BarChartData(
+                      alignment: BarChartAlignment.spaceAround,
+                      maxY: chartMaxY,
+                      barTouchData: BarTouchData(enabled: false),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: chartMaxY <= 4 ? 2 : 4,
+                        getDrawingHorizontalLine: (_) => const FlLine(
+                          color: AppColors.border,
+                          strokeWidth: 1,
                         ),
                       ),
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (value, _) {
-                        final i = value.toInt();
-                        if (i < 0 || i >= data.buckets.length) {
-                          return const SizedBox();
-                        }
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            data.buckets[i].shortLabel,
-                            style: const TextStyle(
-                              fontSize: 9,
-                              color: AppColors.textSecondary,
+                      titlesData: FlTitlesData(
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            interval: chartMaxY <= 4 ? 2 : 4,
+                            reservedSize: 30,
+                            getTitlesWidget: (value, _) => Text(
+                              '${value.toInt()}j',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: AppColors.textSecondary,
+                              ),
                             ),
                           ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            getTitlesWidget: (value, _) {
+                              final i = value.toInt();
+                              if (i < 0 || i >= data.buckets.length) {
+                                return const SizedBox();
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  data.buckets[i].shortLabel,
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      barGroups: data.buckets.asMap().entries.map((entry) {
+                        final isPeak =
+                            entry.value.hours == data.peakBucketHours &&
+                            data.peakBucketHours > 0;
+                        return _bar(
+                          entry.key,
+                          entry.value.hours,
+                          isPeak: isPeak,
+                          width: barWidth,
                         );
-                      },
+                      }).toList(),
                     ),
                   ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
                 ),
-                borderData: FlBorderData(show: false),
-                barGroups: data.buckets.asMap().entries.map((entry) {
-                  final isPeak =
-                      entry.value.hours == data.peakBucketHours &&
-                      data.peakBucketHours > 0;
-                  return _bar(entry.key, entry.value.hours, isPeak: isPeak);
-                }).toList(),
-              ),
-            ),
+              );
+            },
           ),
         ],
       ),
     );
   }
 
-  BarChartGroupData _bar(int x, double y, {bool isPeak = false}) {
+  BarChartGroupData _bar(
+    int x,
+    double y, {
+    bool isPeak = false,
+    double width = 22,
+  }) {
     return BarChartGroupData(
       x: x,
       barRods: [
         BarChartRodData(
           toY: y,
-          width: 22,
+          width: width,
           color: isPeak ? AppColors.success : AppColors.primary,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
         ),
@@ -898,6 +956,7 @@ class _ReportScreenState extends State<ReportScreen> {
   }
 
   Future<void> _loadReportData() async {
+    final serial = ++_loadSerial;
     if (mounted) {
       setState(() {
         _isLoading = true;
@@ -910,12 +969,14 @@ class _ReportScreenState extends State<ReportScreen> {
       if (userId == null) {
         throw Exception('Belum ada sesi login aktif untuk mengambil laporan.');
       }
+      final start = _rangeStart;
+      final end = _rangeEnd;
 
       final results = await Future.wait([
         _settingsService.fetchSettings(userId),
-        _attendanceService.fetchRecordsInRange(userId, _rangeStart, _rangeEnd),
-        _reminderService.fetchRemindersInRange(userId, _rangeStart, _rangeEnd),
-        _worklogService.fetchWorklogsInRange(userId, _rangeStart, _rangeEnd),
+        _attendanceService.fetchRecordsInRange(userId, start, end),
+        _reminderService.fetchRemindersInRange(userId, start, end),
+        _worklogService.fetchWorklogsInRange(userId, start, end),
       ]);
 
       final settings = results[0] as WorkScheduleSettings;
@@ -924,15 +985,15 @@ class _ReportScreenState extends State<ReportScreen> {
       final worklogs = results[3] as List<WorklogEntry>;
 
       final reportData = _reportDataFromSources(
-        start: _rangeStart,
-        end: _rangeEnd,
+        start: start,
+        end: end,
         settings: settings,
         attendance: attendance,
         reminders: reminders,
         worklogs: worklogs,
       );
 
-      if (!mounted) {
+      if (!mounted || serial != _loadSerial) {
         return;
       }
 
@@ -941,7 +1002,7 @@ class _ReportScreenState extends State<ReportScreen> {
         _isLoading = false;
       });
     } catch (error) {
-      if (!mounted) {
+      if (!mounted || serial != _loadSerial) {
         return;
       }
 

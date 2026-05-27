@@ -46,9 +46,12 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!ok || !mounted) return;
 
     final uid = AuthService.instance.currentUserId;
-    AppStore.instance.loadFromCloud().then((_) {
-      NotificationProvider.instance.refresh();
-    });
+    AppStore.instance
+        .loadFromCloud()
+        .then((_) {
+          NotificationProvider.instance.refresh();
+        })
+        .catchError((_) {});
     if (uid != null) RealtimeSyncService.instance.subscribe(uid);
 
     Navigator.pushReplacement(

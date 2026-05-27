@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'features/auth/presentation/reset_password_screen.dart';
@@ -19,7 +20,9 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
   await SupabaseClientService.initialize();
-  await NotificationService.instance.init();
+  if (!kIsWeb) {
+    await NotificationService.instance.init();
+  }
   runApp(const PresensiaApp());
 }
 
@@ -55,9 +58,12 @@ class _PresensiaAppState extends State<PresensiaApp> {
             _initialSignedInSkipped = true;
             return;
           }
-          AppStore.instance.loadFromCloud().then((_) {
-            NotificationProvider.instance.refresh();
-          });
+          AppStore.instance
+              .loadFromCloud()
+              .then((_) {
+                NotificationProvider.instance.refresh();
+              })
+              .catchError((_) {});
           final uid = AuthService.instance.currentUserId;
           if (uid != null) RealtimeSyncService.instance.subscribe(uid);
           if (!_isOnResetScreen()) {

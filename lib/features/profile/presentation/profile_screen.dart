@@ -75,24 +75,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ]),
       builder: (context, _) {
         final profile = AppStore.instance.profile;
+        final bottomPadding = _screenBottomPadding(context);
         return Scaffold(
           backgroundColor: AppColors.background,
           appBar: _buildAppBar(context),
           body: profile == null
               ? const Center(child: CircularProgressIndicator())
               : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 40),
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, bottomPadding),
                   children: [
                     _buildHeader(profile),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 18),
                     _sectionLabel('Info Akun'),
                     const SizedBox(height: 8),
                     _buildInfoCard(profile),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 18),
                     _sectionLabel('Biometrik Wajah'),
                     const SizedBox(height: 8),
                     _buildBiometricCard(),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 18),
                     _sectionLabel('Pengaturan'),
                     const SizedBox(height: 8),
                     _buildSettingsCard(profile),
@@ -123,8 +124,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'Profil',
         style: TextStyle(
           color: AppColors.textPrimary,
-          fontWeight: FontWeight.bold,
-          fontSize: 17,
+          fontWeight: FontWeight.w800,
+          fontSize: 18,
         ),
       ),
       bottom: const PreferredSize(
@@ -138,133 +139,153 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildHeader(EmployeeProfile profile) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryDark.withValues(alpha: 0.06),
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Stack(
-            clipBehavior: Clip.none,
+          Row(
             children: [
-              Container(
-                width: 68,
-                height: 68,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.border, width: 1.5),
-                ),
-                child: profile.avatarUrl != null
-                    ? ClipOval(
-                        child: Image.network(
-                          profile.avatarUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (ctx, err, st) =>
-                              Center(child: _initialsText(profile.initials)),
-                        ),
-                      )
-                    : Center(child: _initialsText(profile.initials)),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 74,
+                    height: 74,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryLight,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.18),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: profile.avatarUrl != null
+                        ? ClipOval(
+                            child: Image.network(
+                              profile.avatarUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (ctx, err, st) => Center(
+                                child: _initialsText(profile.initials),
+                              ),
+                            ),
+                          )
+                        : Center(child: _initialsText(profile.initials)),
+                  ),
+                  Positioned(
+                    bottom: 2,
+                    right: 2,
+                    child: Container(
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: AppColors.successLight,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.surface, width: 2),
+                      ),
+                      child: const Icon(
+                        Icons.check_rounded,
+                        size: 13,
+                        color: AppColors.success,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: AppColors.successLight,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.surface, width: 1.5),
-                  ),
-                  child: const Icon(
-                    Icons.circle,
-                    size: 8,
-                    color: AppColors.success,
-                  ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile.fullName,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 7,
+                      runSpacing: 5,
+                      children: [
+                        _statusPill(
+                          'Aktif',
+                          AppColors.successLight,
+                          AppColors.success,
+                        ),
+                        if (profile.position?.trim().isNotEmpty == true)
+                          _statusPill(
+                            profile.position!,
+                            AppColors.primaryLight,
+                            AppColors.primary,
+                          ),
+                      ],
+                    ),
+                    if (profile.department?.trim().isNotEmpty == true) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        profile.department!,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
+              ),
+              const SizedBox(width: 8),
+              _roundIconButton(
+                icon: Icons.edit_outlined,
+                tooltip: 'Edit Profil',
+                onPressed: () => _showEditSheet(context, profile),
               ),
             ],
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        profile.fullName,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.successLight,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Text(
-                        'Aktif',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.success,
-                        ),
-                      ),
-                    ),
-                  ],
+                const Icon(
+                  Icons.mail_outline_rounded,
+                  size: 18,
+                  color: AppColors.primary,
                 ),
-                if (profile.position != null) ...[
-                  const SizedBox(height: 3),
-                  Text(
-                    profile.position!,
+                const SizedBox(width: 9),
+                Expanded(
+                  child: Text(
+                    profile.email,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
                     ),
                   ),
-                ],
-                if (profile.department != null) ...[
-                  const SizedBox(height: 1),
-                  Text(
-                    profile.department!,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
+                ),
               ],
-            ),
-          ),
-          IconButton(
-            onPressed: () => _showEditSheet(context, profile),
-            icon: const Icon(
-              Icons.edit_outlined,
-              size: 20,
-              color: AppColors.textSecondary,
-            ),
-            tooltip: 'Edit Profil',
-            style: IconButton.styleFrom(
-              backgroundColor: AppColors.background,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-                side: const BorderSide(color: AppColors.border),
-              ),
             ),
           ),
         ],
@@ -287,7 +308,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -358,15 +379,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Icon(icon, size: 16, color: iconColor),
           ),
           const SizedBox(width: 12),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              color: AppColors.textSecondary,
+          Expanded(
+            flex: 3,
+            child: Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+              ),
             ),
           ),
-          const Spacer(),
-          Flexible(
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 4,
             child: Text(
               value,
               overflow: TextOverflow.ellipsis,
@@ -389,7 +414,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -564,7 +589,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -574,6 +599,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             iconColor: AppColors.warning,
             iconBg: AppColors.warningLight,
             label: 'Notifikasi',
+            subtitle: profile.notificationsEnabled
+                ? 'Reminder dan status harian aktif'
+                : 'Reminder sedang dimatikan',
             trailing: Switch(
               value: profile.notificationsEnabled,
               onChanged: (val) => _controller.toggleNotifications(enabled: val),
@@ -587,6 +615,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             iconColor: AppColors.primary,
             iconBg: AppColors.primaryLight,
             label: 'Dev: Kedip Saat Presensi',
+            subtitle: 'Validasi tambahan untuk absensi wajah',
             trailing: Switch(
               value: _devSettings.requireBlinkForAttendance,
               onChanged: _devSettings.setRequireBlinkForAttendance,
@@ -606,6 +635,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               iconColor: AppColors.primary,
               iconBg: AppColors.primaryLight,
               label: 'Ubah Password',
+              subtitle: 'Perbarui keamanan akun',
               trailing: const Icon(
                 Icons.chevron_right_rounded,
                 color: AppColors.textSecondary,
@@ -619,6 +649,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             iconColor: AppColors.primary,
             iconBg: AppColors.primaryLight,
             label: 'Bahasa',
+            subtitle: 'Tampilan aplikasi',
             trailing: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -644,6 +675,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             iconColor: AppColors.textSecondary,
             iconBg: AppColors.background,
             label: 'Versi Aplikasi',
+            subtitle: 'Presensia mobile',
             trailing: const Text(
               'v1.0.0',
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
@@ -659,10 +691,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required Color iconColor,
     required Color iconBg,
     required String label,
+    String? subtitle,
     required Widget trailing,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       child: Row(
         children: [
           Container(
@@ -674,15 +707,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Icon(icon, size: 16, color: iconColor),
           ),
           const SizedBox(width: 12),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: AppColors.textPrimary,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 12),
           trailing,
         ],
       ),
@@ -699,12 +753,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _sectionLabel(String title) => Text(
     title,
     style: const TextStyle(
-      fontSize: 13,
-      fontWeight: FontWeight.w700,
+      fontSize: 12,
+      fontWeight: FontWeight.w800,
       color: AppColors.textSecondary,
-      letterSpacing: 0.4,
+      letterSpacing: 0,
     ),
   );
+
+  Widget _statusPill(String label, Color bg, Color fg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: fg),
+      ),
+    );
+  }
+
+  Widget _roundIconButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return IconButton(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 20, color: AppColors.primary),
+      tooltip: tooltip,
+      style: IconButton.styleFrom(
+        backgroundColor: AppColors.primaryLight,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: AppColors.primary.withValues(alpha: 0.12)),
+        ),
+      ),
+    );
+  }
+
+  double _screenBottomPadding(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final systemBottom = media.padding.bottom > 0
+        ? media.padding.bottom
+        : media.viewPadding.bottom;
+    return 40 + systemBottom;
+  }
 
   // ─── LOGOUT ──────────────────────────────────────────────────────────────
 
@@ -1144,57 +1240,63 @@ class _BottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final bottomInset = media.viewInsets.bottom > 0
-        ? media.viewInsets.bottom
-        : media.padding.bottom;
+        ? media.viewInsets.bottom + 20
+        : (media.padding.bottom > 0
+                  ? media.padding.bottom
+                  : media.viewPadding.bottom) +
+              28;
     return Container(
+      constraints: BoxConstraints(maxHeight: media.size.height * 0.9),
       decoration: const BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + bottomInset),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 12),
-          Container(
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.border,
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, bottomInset),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(4),
               ),
-              const Spacer(),
-              IconButton(
-                onPressed: onClose,
-                icon: const Icon(
-                  Icons.close_rounded,
-                  color: AppColors.textSecondary,
-                  size: 20,
-                ),
-                style: IconButton.styleFrom(
-                  backgroundColor: AppColors.background,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          child,
-        ],
+                const Spacer(),
+                IconButton(
+                  onPressed: onClose,
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    color: AppColors.textSecondary,
+                    size: 20,
+                  ),
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.background,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            child,
+          ],
+        ),
       ),
     );
   }

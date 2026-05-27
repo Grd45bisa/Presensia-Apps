@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -22,12 +23,16 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   static const double _exitStart = 0.7436;
+  static const Duration _cloudReadyTimeout = Duration(seconds: 8);
+  static const Duration _connectivityTimeout = Duration(seconds: 3);
 
   late final AnimationController _anim;
   late final Animation<double> _brandProgress;
   late final Animation<double> _subtitleProgress;
   late final Animation<double> _exitProgress;
   late final Future<void> _introFuture;
+  bool _checkingSession = false;
+  bool _didNavigate = false;
 
   @override
   void initState() {
@@ -62,53 +67,97 @@ class _SplashScreenState extends State<SplashScreen>
     await WidgetsBinding.instance.endOfFrame;
     await Future.delayed(const Duration(milliseconds: 120));
     if (!mounted) return;
-    await _anim.animateTo(_exitStart).orCancel;
+    try {
+      await _anim.animateTo(_exitStart).orCancel;
+    } on TickerCanceled {
+      // Splash sudah ditutup sebelum animasi selesai.
+    }
   }
 
   Future<void> _playExitAnimation() async {
     if (!mounted) return;
-    await _anim
-        .animateTo(
-          1,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOutCubic,
-        )
-        .orCancel;
+    try {
+      await _anim
+          .animateTo(
+            1,
+            duration: const Duration(milliseconds: 500),
+            curve: Curves.easeInOutCubic,
+          )
+          .orCancel;
+    } on TickerCanceled {
+      // Splash sudah ditutup sebelum animasi selesai.
+    }
   }
 
   Future<void> _checkSession() async {
-    final onlineFuture = _isOnline();
-    await _introFuture;
-    if (!mounted) return;
+    if (_checkingSession || _didNavigate) return;
+    _checkingSession = true;
+    try {
+      await _introFuture;
+      if (!mounted) return;
 
-    if (!await onlineFuture) {
-      await _showNoInternetDialog();
-      return;
+      while (mounted && !_didNavigate) {
+        if (!await _isOnline()) {
+          await _showNoInternetDialog();
+          continue;
+        }
+
+        final screen = await _prepareStartScreen();
+        if (!mounted) return;
+
+        await _playExitAnimation();
+        if (!mounted) return;
+
+        _navigate(screen);
+        return;
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _activateSignedInServices();
+      await _playExitAnimation();
+      if (!mounted) return;
+      _navigate(_fallbackStartScreen());
+    } finally {
+      _checkingSession = false;
     }
-
-    final screen = await _prepareStartScreen();
-    if (!mounted) return;
-
-    await _playExitAnimation();
-    if (!mounted) return;
-
-    _navigate(screen);
   }
 
   Future<Widget> _prepareStartScreen() async {
     if (AuthService.instance.isSignedIn) {
-      final uid = AuthService.instance.currentUserId;
-      await AppStore.instance.loadFromCloud();
-      NotificationProvider.instance.refresh();
-      if (uid != null) RealtimeSyncService.instance.subscribe(uid);
+      try {
+        await AppStore.instance.loadFromCloud().timeout(_cloudReadyTimeout);
+      } catch (_) {
+        // Jangan tahan splash selamanya. Data bisa tersinkron setelah screen utama hidup.
+      }
+      _activateSignedInServices();
       return const MainScreen();
     }
 
     return const LoginScreen();
   }
 
+  void _activateSignedInServices() {
+    if (!AuthService.instance.isSignedIn) return;
+    final uid = AuthService.instance.currentUserId;
+    NotificationProvider.instance.refresh();
+    if (uid != null) RealtimeSyncService.instance.subscribe(uid);
+  }
+
+  Widget _fallbackStartScreen() {
+    return AuthService.instance.isSignedIn
+        ? const MainScreen()
+        : const LoginScreen();
+  }
+
   Future<bool> _isOnline() async {
-    final result = await Connectivity().checkConnectivity();
+    if (kIsWeb) return true;
+
+    final result = await Connectivity().checkConnectivity().timeout(
+      _connectivityTimeout,
+      onTimeout: () {
+        return [ConnectivityResult.wifi];
+      },
+    );
     return result.any((r) => r != ConnectivityResult.none);
   }
 
@@ -211,11 +260,11 @@ class _SplashScreenState extends State<SplashScreen>
         ),
       ),
     );
-    if (!mounted) return;
-    unawaited(_checkSession());
   }
 
   void _navigate(Widget screen) {
+    if (_didNavigate || !mounted) return;
+    _didNavigate = true;
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(

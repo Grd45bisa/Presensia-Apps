@@ -530,7 +530,10 @@ class _TrackerScreenState extends State<TrackerScreen> {
   Widget build(BuildContext context) {
     final grouped = _groupByDate(_worklogs);
     final sortedDates = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final media = MediaQuery.of(context);
+    final bottomInset = media.padding.bottom > 0
+        ? media.padding.bottom
+        : media.viewPadding.bottom;
     final fabBottomPadding = bottomInset + _fabBottomOffset;
     final contentBottomPadding = fabBottomPadding + _listBottomGap;
 
@@ -2370,7 +2373,10 @@ class _TrackerScreenState extends State<TrackerScreen> {
     final media = MediaQuery.of(context);
     return media.viewInsets.bottom > 0
         ? media.viewInsets.bottom + 20
-        : media.padding.bottom + 28;
+        : (media.padding.bottom > 0
+                  ? media.padding.bottom
+                  : media.viewPadding.bottom) +
+              28;
   }
 
   InputDecoration _sheetInput(String hint) => InputDecoration(

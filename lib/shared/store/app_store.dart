@@ -13,6 +13,8 @@ class AppStore extends ChangeNotifier {
   static final AppStore instance = AppStore._();
   AppStore._();
 
+  static const Duration _cloudLoadTimeout = Duration(seconds: 8);
+
   bool _disposed = false;
 
   @override
@@ -106,10 +108,10 @@ class AppStore extends ChangeNotifier {
       List.unmodifiable(_worklogs[dateKey(d)] ?? []);
 
   Map<String, List<WorklogEntry>> get allWorklogs => Map.unmodifiable(
-        _worklogs.map(
-          (key, value) => MapEntry(key, List<WorklogEntry>.unmodifiable(value)),
-        ),
-      );
+    _worklogs.map(
+      (key, value) => MapEntry(key, List<WorklogEntry>.unmodifiable(value)),
+    ),
+  );
 
   void addWorklog(WorklogEntry entry) {
     final key = dateKey(entry.date);
@@ -120,8 +122,7 @@ class AppStore extends ChangeNotifier {
 
   void upsertWorklog(WorklogEntry entry) {
     for (final key in _worklogs.keys.toList()) {
-      final filtered =
-          _worklogs[key]!.where((e) => e.id != entry.id).toList();
+      final filtered = _worklogs[key]!.where((e) => e.id != entry.id).toList();
       if (filtered.length != _worklogs[key]!.length) {
         if (filtered.isEmpty) {
           _worklogs.remove(key);
@@ -145,8 +146,7 @@ class AppStore extends ChangeNotifier {
   void removeWorklog(String id) {
     var changed = false;
     for (final key in _worklogs.keys.toList()) {
-      final filtered =
-          _worklogs[key]!.where((e) => e.id != id).toList();
+      final filtered = _worklogs[key]!.where((e) => e.id != id).toList();
       if (filtered.length != _worklogs[key]!.length) {
         changed = true;
         if (filtered.isEmpty) {
@@ -224,7 +224,7 @@ class AppStore extends ChangeNotifier {
         AttendanceService.instance.fetchMonthRecords(uid, now.year, now.month),
         WorklogService.instance.fetchMonthWorklogs(uid, now.year, now.month),
         ReminderService.instance.fetchMonthReminders(uid, now.year, now.month),
-      ]);
+      ]).timeout(_cloudLoadTimeout);
 
       _profile = results[0] as EmployeeProfile;
       _settings = results[1] as WorkScheduleSettings;

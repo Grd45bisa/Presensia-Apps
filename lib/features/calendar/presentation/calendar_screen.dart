@@ -33,6 +33,8 @@ class _CalendarScreenState extends State<CalendarScreen>
   CalendarFormat _calendarFormat = CalendarFormat.month;
 
   final _store = AppStore.instance;
+  final Map<String, _CalendarDayMeta> _dayMetaCache = {};
+  final Set<String> _loadedMonthKeys = {};
 
   // ─── FAB STATE ────────────────────────────────────────────────────────────
   bool _fabExpanded = false;
@@ -78,7 +80,7 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   Future<void> _refreshCalendar() async {
     _closeFab();
-    await _store.loadMonth(_focusedDay.year, _focusedDay.month);
+    await _loadMonthIfNeeded(_focusedDay, force: true);
     if (!mounted) {
       return;
     }
@@ -88,6 +90,13 @@ class _CalendarScreenState extends State<CalendarScreen>
         duration: Duration(seconds: 1),
       ),
     );
+  }
+
+  Future<void> _loadMonthIfNeeded(DateTime month, {bool force = false}) async {
+    final key = '${month.year}-${month.month.toString().padLeft(2, '0')}';
+    if (!force && _loadedMonthKeys.contains(key)) return;
+    _loadedMonthKeys.add(key);
+    await _store.loadMonth(month.year, month.month);
   }
 
   // ─── STATUS STYLES ────────────────────────────────────────────────────────
@@ -207,8 +216,11 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   @override
   Widget build(BuildContext context) {
-    final safeBottom = MediaQuery.of(context).padding.bottom;
-    final fabBottomPadding = safeBottom + _fabBottomOffset;
+    final media = MediaQuery.of(context);
+    final systemBottom = media.padding.bottom > 0
+        ? media.padding.bottom
+        : media.viewPadding.bottom;
+    final fabBottomPadding = systemBottom + _fabBottomOffset;
     final contentBottomPadding = fabBottomPadding + _contentBottomGap;
 
     return GestureDetector(
@@ -220,12 +232,13 @@ class _CalendarScreenState extends State<CalendarScreen>
           backgroundColor: AppColors.surface,
           elevation: 0,
           automaticallyImplyLeading: false,
+          surfaceTintColor: Colors.transparent,
           title: const Text(
             'Kalender',
             style: TextStyle(
               color: AppColors.textPrimary,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
             ),
           ),
           actions: [
@@ -240,6 +253,7 @@ class _CalendarScreenState extends State<CalendarScreen>
                   _focusedDay = now;
                   _selectedDay = DateTime(now.year, now.month, now.day);
                 });
+                _loadMonthIfNeeded(now);
               },
               icon: const Icon(
                 Icons.today_rounded,
@@ -265,6 +279,7 @@ class _CalendarScreenState extends State<CalendarScreen>
             ListenableBuilder(
               listenable: _store,
               builder: (context, _) {
+                _dayMetaCache.clear();
                 return RefreshIndicator(
                   onRefresh: _refreshCalendar,
                   child: ListView(
@@ -278,11 +293,11 @@ class _CalendarScreenState extends State<CalendarScreen>
                     children: [
                       _buildMonthSummary(),
                       const SizedBox(height: 12),
-                      _buildCalendarCard(),
+                      RepaintBoundary(child: _buildCalendarCard()),
                       const SizedBox(height: 12),
                       _buildLegend(),
                       const SizedBox(height: 12),
-                      _buildDayDetail(),
+                      RepaintBoundary(child: _buildDayDetail()),
                     ],
                   ),
                 );
@@ -425,40 +440,81 @@ class _CalendarScreenState extends State<CalendarScreen>
   Widget _buildMonthSummary() {
     final stats = _store.monthStatsOf(_focusedDay);
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 13),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryDark.withValues(alpha: 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          _summaryCell(
-            'Hadir',
-            stats.present.toString(),
-            AppColors.success,
-            Icons.check_circle_rounded,
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryLight,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.calendar_month_rounded,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _monthLabel(_focusedDay),
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+              _chip('Ringkasan', AppColors.primary, AppColors.primaryLight),
+            ],
           ),
-          _vDivider(),
-          _summaryCell(
-            'Absen',
-            stats.missing.toString(),
-            AppColors.missing,
-            Icons.warning_amber_rounded,
-          ),
-          _vDivider(),
-          _summaryCell(
-            'Libur',
-            stats.offDay.toString(),
-            AppColors.error,
-            Icons.weekend_rounded,
-          ),
-          _vDivider(),
-          _summaryCell(
-            'Pengingat',
-            stats.reminders.toString(),
-            AppColors.primary,
-            Icons.notifications_rounded,
+          const SizedBox(height: 13),
+          Row(
+            children: [
+              _summaryCell(
+                'Hadir',
+                stats.present.toString(),
+                AppColors.success,
+                Icons.check_circle_rounded,
+              ),
+              _vDivider(),
+              _summaryCell(
+                'Absen',
+                stats.missing.toString(),
+                AppColors.missing,
+                Icons.warning_amber_rounded,
+              ),
+              _vDivider(),
+              _summaryCell(
+                'Libur',
+                stats.offDay.toString(),
+                AppColors.error,
+                Icons.weekend_rounded,
+              ),
+              _vDivider(),
+              _summaryCell(
+                'Pengingat',
+                stats.reminders.toString(),
+                AppColors.primary,
+                Icons.notifications_rounded,
+              ),
+            ],
           ),
         ],
       ),
@@ -500,10 +556,10 @@ class _CalendarScreenState extends State<CalendarScreen>
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.border),
       ),
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 10),
       child: TableCalendar(
         firstDay: DateTime(2024),
         lastDay: DateTime(2030),
@@ -525,7 +581,7 @@ class _CalendarScreenState extends State<CalendarScreen>
         },
         onPageChanged: (focused) {
           setState(() => _focusedDay = focused);
-          _store.loadMonth(focused.year, focused.month);
+          _loadMonthIfNeeded(focused);
         },
         startingDayOfWeek: StartingDayOfWeek.monday,
         headerStyle: const HeaderStyle(
@@ -587,17 +643,16 @@ class _CalendarScreenState extends State<CalendarScreen>
     bool isToday = false,
     bool isSelected = false,
   }) {
-    final state = _store.dayStateOf(day);
-    final record = _store.attendanceOf(day);
-    final cellStyle = _dayCellStyle(state, record?.status);
-    final reminderCount = _store.remindersOf(day).length;
-    final worklogCount = _store.worklogsOf(day).length;
+    final meta = _dayMetaOf(day);
+    final cellStyle = _dayCellStyle(meta.state, meta.record?.status);
+    final reminderCount = meta.reminderCount;
+    final worklogCount = meta.worklogCount;
 
     return Container(
       margin: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         color: isSelected ? AppColors.primary : cellStyle.bg,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isSelected
               ? AppColors.primary
@@ -701,7 +756,7 @@ class _CalendarScreenState extends State<CalendarScreen>
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.border),
       ),
       child: Wrap(
@@ -740,15 +795,16 @@ class _CalendarScreenState extends State<CalendarScreen>
 
   Widget _buildDayDetail() {
     final day = _selectedDay;
-    final record = _store.attendanceOf(day);
-    final worklogs = _store.worklogsOf(day);
-    final reminders = _store.remindersOf(day);
-    final state = _store.dayStateOf(day);
+    final meta = _dayMetaOf(day);
+    final record = meta.record;
+    final worklogs = meta.worklogs;
+    final reminders = meta.reminders;
+    final state = meta.state;
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -1145,102 +1201,102 @@ class _CalendarScreenState extends State<CalendarScreen>
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.border),
       ),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              width: 3,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  bottomLeft: Radius.circular(8),
-                ),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 74,
+            decoration: const BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(8),
+                bottomLeft: Radius.circular(8),
               ),
             ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            r.title,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                              color: AppColors.textPrimary,
-                            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          r.title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            color: AppColors.textPrimary,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        GestureDetector(
-                          onTap: () {
-                            _store.removeReminder(r);
-                            NotificationService.instance.cancelReminder(r);
-                            _syncReminderDelete(r);
-                          },
-                          child: const Icon(
-                            Icons.close_rounded,
-                            size: 14,
-                            color: AppColors.textSecondary,
-                          ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          _store.removeReminder(r);
+                          NotificationService.instance.cancelReminder(r);
+                          _syncReminderDelete(r);
+                        },
+                        child: const Icon(
+                          Icons.close_rounded,
+                          size: 14,
+                          color: AppColors.textSecondary,
                         ),
-                      ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    start,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
                     ),
+                  ),
+                  if (r.description != null && r.description!.isNotEmpty) ...[
                     const SizedBox(height: 2),
                     Text(
-                      start,
+                      r.description!,
                       style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textSecondary,
                       ),
-                    ),
-                    if (r.description != null && r.description!.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        r.description!,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 4,
-                      children: r.reminderOffsetsInMinutes.map((m) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryLight,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            '$m mnt',
-                            style: const TextStyle(
-                              fontSize: 9,
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        );
-                      }).toList(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 4,
+                    children: r.reminderOffsetsInMinutes.map((m) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryLight,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '$m mnt',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -2449,7 +2505,10 @@ class _CalendarScreenState extends State<CalendarScreen>
     final media = MediaQuery.of(context);
     return media.viewInsets.bottom > 0
         ? media.viewInsets.bottom + 20
-        : media.padding.bottom + 28;
+        : (media.padding.bottom > 0
+                  ? media.padding.bottom
+                  : media.viewPadding.bottom) +
+              28;
   }
 
   Widget _fieldBox({required IconData icon, required String text}) {
@@ -2556,6 +2615,21 @@ class _CalendarScreenState extends State<CalendarScreen>
     ),
   );
 
+  _CalendarDayMeta _dayMetaOf(DateTime day) {
+    final key = AppStore.dateKey(day);
+    final cached = _dayMetaCache[key];
+    if (cached != null) return cached;
+
+    final meta = _CalendarDayMeta(
+      state: _store.dayStateOf(day),
+      record: _store.attendanceOf(day),
+      worklogs: _store.worklogsOf(day),
+      reminders: _store.remindersOf(day),
+    );
+    _dayMetaCache[key] = meta;
+    return meta;
+  }
+
   // ─── FORMAT ───────────────────────────────────────────────────────────────
 
   String _fmtTod(TimeOfDay t) =>
@@ -2590,6 +2664,41 @@ class _CalendarScreenState extends State<CalendarScreen>
     const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
     return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]} ${d.year}';
   }
+
+  String _monthLabel(DateTime d) {
+    const months = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
+    ];
+    return '${months[d.month - 1]} ${d.year}';
+  }
+}
+
+class _CalendarDayMeta {
+  const _CalendarDayMeta({
+    required this.state,
+    required this.record,
+    required this.worklogs,
+    required this.reminders,
+  });
+
+  final DayDisplayState state;
+  final AttendanceRecord? record;
+  final List<WorklogEntry> worklogs;
+  final List<ReminderEvent> reminders;
+
+  int get worklogCount => worklogs.length;
+  int get reminderCount => reminders.length;
 }
 
 // ─── MANUAL ACTIVITY SHEET WIDGET ─────────────────────────────────────────────
@@ -3004,7 +3113,10 @@ class _ManualActivitySheetState extends State<_ManualActivitySheet> {
     final media = MediaQuery.of(context);
     return media.viewInsets.bottom > 0
         ? media.viewInsets.bottom + 20
-        : media.padding.bottom + 28;
+        : (media.padding.bottom > 0
+                  ? media.padding.bottom
+                  : media.viewPadding.bottom) +
+              28;
   }
 
   InputDecoration _inputDeco(String hint) => InputDecoration(
