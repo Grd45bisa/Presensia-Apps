@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -30,6 +31,8 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _subtitleProgress;
   late final Animation<double> _exitProgress;
   late final Future<void> _introFuture;
+  bool _checkingSession = false;
+  bool _didNavigate = false;
 
   @override
   void initState() {
@@ -87,6 +90,7 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _checkSession() async {
+<<<<<<< HEAD
     try {
       final onlineFuture = _isOnline();
       await _introFuture;
@@ -109,11 +113,43 @@ class _SplashScreenState extends State<SplashScreen>
       await _playExitAnimation();
       if (!mounted) return;
       _navigate(_fallbackStartScreen());
+=======
+    if (_checkingSession || _didNavigate) return;
+    _checkingSession = true;
+    try {
+      await _introFuture;
+      if (!mounted) return;
+
+      while (mounted && !_didNavigate) {
+        if (!await _isOnline()) {
+          await _showNoInternetDialog();
+          continue;
+        }
+
+        final screen = await _prepareStartScreen();
+        if (!mounted) return;
+
+        await _playExitAnimation();
+        if (!mounted) return;
+
+        _navigate(screen);
+        return;
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _activateSignedInServices();
+      await _playExitAnimation();
+      if (!mounted) return;
+      _navigate(_fallbackStartScreen());
+    } finally {
+      _checkingSession = false;
+>>>>>>> recover-work
     }
   }
 
   Future<Widget> _prepareStartScreen() async {
     if (AuthService.instance.isSignedIn) {
+<<<<<<< HEAD
       final uid = AuthService.instance.currentUserId;
       try {
         await AppStore.instance.loadFromCloud().timeout(_cloudReadyTimeout);
@@ -122,12 +158,30 @@ class _SplashScreenState extends State<SplashScreen>
       }
       NotificationProvider.instance.refresh();
       if (uid != null) RealtimeSyncService.instance.subscribe(uid);
+=======
+      try {
+        await AppStore.instance.loadFromCloud().timeout(_cloudReadyTimeout);
+      } catch (_) {
+        // Jangan tahan splash selamanya. Data bisa tersinkron setelah screen utama hidup.
+      }
+      _activateSignedInServices();
+>>>>>>> recover-work
       return const MainScreen();
     }
 
     return const LoginScreen();
   }
 
+<<<<<<< HEAD
+=======
+  void _activateSignedInServices() {
+    if (!AuthService.instance.isSignedIn) return;
+    final uid = AuthService.instance.currentUserId;
+    NotificationProvider.instance.refresh();
+    if (uid != null) RealtimeSyncService.instance.subscribe(uid);
+  }
+
+>>>>>>> recover-work
   Widget _fallbackStartScreen() {
     return AuthService.instance.isSignedIn
         ? const MainScreen()
@@ -135,6 +189,11 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<bool> _isOnline() async {
+<<<<<<< HEAD
+=======
+    if (kIsWeb) return true;
+
+>>>>>>> recover-work
     final result = await Connectivity().checkConnectivity().timeout(
       _connectivityTimeout,
       onTimeout: () {
@@ -243,11 +302,11 @@ class _SplashScreenState extends State<SplashScreen>
         ),
       ),
     );
-    if (!mounted) return;
-    unawaited(_checkSession());
   }
 
   void _navigate(Widget screen) {
+    if (_didNavigate || !mounted) return;
+    _didNavigate = true;
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(

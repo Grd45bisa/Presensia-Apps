@@ -2505,7 +2505,10 @@ class _CalendarScreenState extends State<CalendarScreen>
     final media = MediaQuery.of(context);
     return media.viewInsets.bottom > 0
         ? media.viewInsets.bottom + 20
-        : media.padding.bottom + 28;
+        : (media.padding.bottom > 0
+                  ? media.padding.bottom
+                  : media.viewPadding.bottom) +
+              28;
   }
 
   Widget _fieldBox({required IconData icon, required String text}) {
@@ -3110,7 +3113,10 @@ class _ManualActivitySheetState extends State<_ManualActivitySheet> {
     final media = MediaQuery.of(context);
     return media.viewInsets.bottom > 0
         ? media.viewInsets.bottom + 20
-        : media.padding.bottom + 28;
+        : (media.padding.bottom > 0
+                  ? media.padding.bottom
+                  : media.viewPadding.bottom) +
+              28;
   }
 
   InputDecoration _inputDeco(String hint) => InputDecoration(

@@ -37,6 +37,10 @@ class _NotificationPanelState extends State<_NotificationPanel> {
   Widget build(BuildContext context) {
     final notifications = _provider.compute();
     final unread = notifications.where((n) => !n.isRead).length;
+    final media = MediaQuery.of(context);
+    final bottomInset = media.padding.bottom > 0
+        ? media.padding.bottom
+        : media.viewPadding.bottom;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.6,
@@ -55,7 +59,7 @@ class _NotificationPanelState extends State<_NotificationPanel> {
                   ? _buildEmpty()
                   : ListView.separated(
                       controller: scrollCtrl,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      padding: EdgeInsets.fromLTRB(0, 8, 0, 12 + bottomInset),
                       itemCount: notifications.length,
                       separatorBuilder: (_, _) => const Divider(
                         height: 1,
