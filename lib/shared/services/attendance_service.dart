@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/app_models.dart';
@@ -83,6 +86,9 @@ class AttendanceService {
     String employeeId, {
     AttendanceSource source = AttendanceSource.face,
     String? note,
+    img.Image? evidenceImage,
+    double? faceSimilarity,
+    double? faceThreshold,
   }) async {
     final now = DateTime.now();
     final record = AttendanceRecord(
@@ -97,6 +103,15 @@ class AttendanceService {
     final payload = record.toJson(employeeId: employeeId);
     // Use DB server time for check_in to avoid clock drift
     payload['check_in'] = now.toUtc().toIso8601String();
+    payload.addAll(
+      await _buildEvidencePayload(
+        employeeId: employeeId,
+        type: 'check-in',
+        image: evidenceImage,
+        faceSimilarity: faceSimilarity,
+        faceThreshold: faceThreshold,
+      ),
+    );
 
     final inserted = await _db
         .from('attendance_records')
@@ -106,15 +121,28 @@ class AttendanceService {
     return AttendanceRecord.fromJson(inserted);
   }
 
-  Future<AttendanceRecord> checkOut(String employeeId) async {
+  Future<AttendanceRecord> checkOut(
+    String employeeId, {
+    img.Image? evidenceImage,
+    double? faceSimilarity,
+    double? faceThreshold,
+  }) async {
     final now = DateTime.now();
     final today = _dateStr(now);
+    final evidencePayload = await _buildEvidencePayload(
+      employeeId: employeeId,
+      type: 'check-out',
+      image: evidenceImage,
+      faceSimilarity: faceSimilarity,
+      faceThreshold: faceThreshold,
+    );
 
     final updated = await _db
         .from('attendance_records')
         .update({
           'check_out': now.toUtc().toIso8601String(),
           'updated_at': now.toUtc().toIso8601String(),
+          ...evidencePayload,
         })
         .eq('employee_id', employeeId)
         .eq('date', today)
@@ -195,5 +223,62 @@ class AttendanceService {
       );
     }
     throw StateError('Respons presensi dari server tidak valid.');
+  }
+
+  Future<Map<String, dynamic>> _buildEvidencePayload({
+    required String employeeId,
+    required String type,
+    required img.Image? image,
+    required double? faceSimilarity,
+    required double? faceThreshold,
+  }) async {
+    final payload = <String, dynamic>{};
+    if (faceSimilarity != null) payload['face_similarity'] = faceSimilarity;
+    if (faceThreshold != null) payload['face_threshold'] = faceThreshold;
+    if (image == null) return payload;
+
+    final path = await _uploadEvidencePhoto(
+      employeeId: employeeId,
+      type: type,
+      image: image,
+    );
+    payload['evidence_photo_path'] = path;
+    if (type == 'check-in') {
+      payload['evidence_photo_in_path'] = path;
+    } else {
+      payload['evidence_photo_out_path'] = path;
+    }
+    return payload;
+  }
+
+  Future<String> _uploadEvidencePhoto({
+    required String employeeId,
+    required String type,
+    required img.Image image,
+  }) async {
+    final resized = image.width > 960
+        ? img.copyResize(
+            image,
+            width: 960,
+            interpolation: img.Interpolation.average,
+          )
+        : image;
+    final bytes = Uint8List.fromList(img.encodeJpg(resized, quality: 76));
+    final now = DateTime.now().toUtc();
+    final date = _dateStr(now);
+    final month = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    final path = '$employeeId/$month/${date}_${type}_${_uuid.v4()}.jpg';
+
+    await _db.storage
+        .from('attendance-evidence')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(
+            contentType: 'image/jpeg',
+            upsert: false,
+          ),
+        );
+    return path;
   }
 }

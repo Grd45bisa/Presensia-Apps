@@ -6,6 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../../../shared/providers/notification_provider.dart';
 import '../../../shared/services/auth_service.dart';
+import '../../../shared/services/device_session_service.dart';
 import '../../../shared/services/realtime_sync_service.dart';
 import '../../../shared/store/app_store.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -141,6 +142,7 @@ class _SplashScreenState extends State<SplashScreen>
     final uid = AuthService.instance.currentUserId;
     NotificationProvider.instance.refresh();
     if (uid != null) RealtimeSyncService.instance.subscribe(uid);
+    DeviceSessionService.instance.start();
   }
 
   Widget _fallbackStartScreen() {

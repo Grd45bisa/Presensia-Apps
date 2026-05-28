@@ -618,7 +618,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _faceMatched = true;
       });
       await Future.delayed(const Duration(milliseconds: 350));
-      await _manualCheckInOrOut(source: AttendanceSource.face);
+      await _manualCheckInOrOut(
+        source: AttendanceSource.face,
+        evidenceImage: fullImage,
+        faceSimilarity: best.similarity,
+      );
       _cameraKey.currentState?.markDone();
       return true;
     } on QualityFilterException {
@@ -720,6 +724,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Future<void> _manualCheckInOrOut({
     AttendanceSource source = AttendanceSource.manual,
+    img.Image? evidenceImage,
+    double? faceSimilarity,
   }) async {
     final uid = AuthService.instance.currentUserId;
     if (uid == null) return;
@@ -738,6 +744,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         final record = await AttendanceService.instance.checkIn(
           uid,
           source: source,
+          evidenceImage: evidenceImage,
+          faceSimilarity: faceSimilarity,
+          faceThreshold: _faceMatchThreshold,
         );
         if (!mounted) return;
         _store.setAttendance(record);
@@ -750,7 +759,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           color: AppColors.success,
         );
       } else {
-        final record = await AttendanceService.instance.checkOut(uid);
+        final record = await AttendanceService.instance.checkOut(
+          uid,
+          evidenceImage: evidenceImage,
+          faceSimilarity: faceSimilarity,
+          faceThreshold: _faceMatchThreshold,
+        );
         if (!mounted) return;
         _store.setAttendance(record);
         NotificationProvider.instance.refresh();

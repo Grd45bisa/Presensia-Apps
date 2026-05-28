@@ -6,7 +6,9 @@ import 'features/auth/presentation/reset_password_screen.dart';
 import 'features/auth/presentation/splash_screen.dart';
 import 'features/main_nav/main_screen.dart';
 import 'shared/providers/notification_provider.dart';
+import 'shared/services/attendance_dev_settings.dart';
 import 'shared/services/auth_service.dart';
+import 'shared/services/device_session_service.dart';
 import 'shared/services/notification_service.dart';
 import 'shared/services/realtime_sync_service.dart';
 import 'shared/services/supabase_client.dart';
@@ -20,6 +22,7 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
   await SupabaseClientService.initialize();
+  AttendanceDevSettings.instance.startDatabaseSync();
   if (!kIsWeb) {
     await NotificationService.instance.init();
   }
@@ -66,6 +69,7 @@ class _PresensiaAppState extends State<PresensiaApp> {
               .catchError((_) {});
           final uid = AuthService.instance.currentUserId;
           if (uid != null) RealtimeSyncService.instance.subscribe(uid);
+          DeviceSessionService.instance.start();
           if (!_isOnResetScreen()) {
             nav.pushAndRemoveUntil(
               MaterialPageRoute(builder: (_) => const MainScreen()),
@@ -80,6 +84,7 @@ class _PresensiaAppState extends State<PresensiaApp> {
 
         case AuthChangeEvent.signedOut:
           _initialSignedInSkipped = false;
+          DeviceSessionService.instance.stop();
           RealtimeSyncService.instance.unsubscribe();
           AppStore.instance.clear();
           nav.pushAndRemoveUntil(

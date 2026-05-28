@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../shared/providers/notification_provider.dart';
 import '../../../shared/services/auth_service.dart';
+import '../../../shared/services/device_session_service.dart';
 import '../../../shared/services/realtime_sync_service.dart';
 import '../../../shared/store/app_store.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -69,6 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
         })
         .catchError((_) {});
     if (uid != null) RealtimeSyncService.instance.subscribe(uid);
+    DeviceSessionService.instance.start();
 
     Navigator.pushReplacement(
       context,

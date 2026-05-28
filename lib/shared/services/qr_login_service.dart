@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:http/http.dart' as http;
 
@@ -18,9 +19,11 @@ class QrLoginService {
   static final QrLoginService instance = QrLoginService._();
   QrLoginService._();
 
+  static const _requestTimeout = Duration(seconds: 45);
+
   static const _defaultBaseUrl = String.fromEnvironment(
     'PRESENSIA_API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:5000',
+    defaultValue: 'https://testing.kitapunya.web.id',
   );
 
   Future<void> loginWithQrPayload(String payload) async {
@@ -30,17 +33,30 @@ class QrLoginService {
     }
 
     final device = await DeviceBindingService.instance.getDeviceInfo();
-    final response = await http.post(
-      Uri.parse('$_defaultBaseUrl/api/auth/qr-login'),
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'token': token,
-        'device_id': device.id,
-        'device_name': device.name,
-        'platform': device.platform,
-        'app_version': '1.0.0',
-      }),
-    );
+    late final http.Response response;
+    try {
+      response = await http
+          .post(
+            Uri.parse('$_defaultBaseUrl/api/auth/qr-login'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'token': token,
+              'device_id': device.id,
+              'device_name': device.name,
+              'platform': device.platform,
+              'app_version': '1.0.0',
+            }),
+          )
+          .timeout(_requestTimeout);
+    } on TimeoutException {
+      throw const QrLoginException(
+        'Backend terlalu lama merespons QR Login. Pastikan tunnel testing.kitapunya.web.id dan Supabase sedang stabil, lalu coba QR baru.',
+      );
+    } catch (_) {
+      throw const QrLoginException(
+        'Tidak bisa terhubung ke backend. Pastikan testing.kitapunya.web.id aktif dan mengarah ke server backend.',
+      );
+    }
 
     final data = _decodeResponse(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -56,7 +72,13 @@ class QrLoginService {
       throw const QrLoginException('Sesi login dari server tidak lengkap.');
     }
 
-    await SupabaseClientService.client.auth.setSession(refreshToken);
+    try {
+      await SupabaseClientService.client.auth.setSession(refreshToken);
+    } catch (_) {
+      throw const QrLoginException(
+        'QR valid, tetapi sesi Supabase gagal dibuat. Coba scan QR baru.',
+      );
+    }
   }
 
   Map<String, dynamic> _decodeResponse(String body) {
