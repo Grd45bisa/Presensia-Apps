@@ -5,6 +5,7 @@ import 'package:image/image.dart' as img;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../models/app_models.dart';
+import 'attendance_geofence_service.dart';
 import 'attendance_schedule_service.dart';
 import 'supabase_client.dart';
 
@@ -91,6 +92,7 @@ class AttendanceService {
     double? faceSimilarity,
     double? faceThreshold,
     ScheduleValidationResult? scheduleValidation,
+    GeofenceValidationResult? geofenceValidation,
     String? selectedShiftId,
   }) async {
     final now = DateTime.now();
@@ -107,6 +109,7 @@ class AttendanceService {
     // Use DB server time for check_in to avoid clock drift
     payload['check_in'] = now.toUtc().toIso8601String();
     payload.addAll(_schedulePayload(scheduleValidation, selectedShiftId));
+    payload.addAll(_geofencePayload(geofenceValidation));
     payload.addAll(
       await _buildEvidencePayload(
         employeeId: employeeId,
@@ -131,6 +134,7 @@ class AttendanceService {
     double? faceSimilarity,
     double? faceThreshold,
     ScheduleValidationResult? scheduleValidation,
+    GeofenceValidationResult? geofenceValidation,
     String? selectedShiftId,
     String? checkoutReason,
     String? checkoutNote,
@@ -148,6 +152,7 @@ class AttendanceService {
       'check_out': now.toUtc().toIso8601String(),
       'updated_at': now.toUtc().toIso8601String(),
       ..._checkoutSchedulePayload(scheduleValidation, selectedShiftId),
+      ..._geofencePayload(geofenceValidation),
       ...evidencePayload,
     };
     if (checkoutReason != null) {
@@ -188,6 +193,24 @@ class AttendanceService {
       return {};
     }
     return _schedulePayload(validation, selectedShiftId);
+  }
+
+  Map<String, dynamic> _geofencePayload(
+    GeofenceValidationResult? validation,
+  ) {
+    if (validation == null) return {};
+
+    return {
+      'latitude': validation.latitude,
+      'longitude': validation.longitude,
+      'gps_accuracy_meters': validation.accuracyMeters,
+      'is_mock_location': validation.isMockLocation,
+      'geofence_status': validation.isMockLocation
+          ? 'suspected_mock_location'
+          : validation.geofenceStatus,
+      'office_location_id': validation.officeLocation?.id,
+      'distance_from_office_meters': validation.distanceMeters,
+    };
   }
 
   Future<AttendanceRecord> checkInWithFaceNonce(

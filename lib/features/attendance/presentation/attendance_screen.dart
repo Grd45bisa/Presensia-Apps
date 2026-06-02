@@ -9,6 +9,7 @@ import 'package:image/image.dart' as img;
 import '../../../shared/models/app_models.dart';
 import '../../../shared/providers/notification_provider.dart';
 import '../../../shared/services/attendance_dev_settings.dart';
+import '../../../shared/services/attendance_geofence_service.dart';
 import '../../../shared/services/attendance_schedule_service.dart';
 import '../../../shared/services/attendance_service.dart';
 import '../../../shared/services/auth_service.dart';
@@ -55,8 +56,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   AttendanceScheduleConfig? _scheduleConfig;
   WorkShift? _selectedShift;
   ScheduleValidationResult? _pendingScheduleValidation;
+  GeofenceValidationResult? _pendingGeofenceValidation;
   bool _scheduleLoading = true;
   String? _scheduleMessage;
+  bool _checkingGeofence = false;
+  bool _preparingLocation = false;
+  bool _locationReady = false;
+  String? _locationMessage;
 
   DateTime get _today =>
       DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
@@ -70,7 +76,38 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     super.initState();
     _checkEnrollmentStatus();
     _loadScheduleConfig();
+    _prepareLocationAccess();
     unawaited(FaceRecognitionService.instance.init());
+  }
+
+  Future<void> _prepareLocationAccess() async {
+    setState(() {
+      _preparingLocation = true;
+      _locationMessage = null;
+    });
+
+    try {
+      await AttendanceGeofenceService.instance.prepareLocationAccess();
+      if (!mounted) return;
+      setState(() {
+        _locationReady = true;
+        _locationMessage = 'GPS siap untuk validasi presensi.';
+      });
+    } on GeofencePermissionException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _locationReady = false;
+        _locationMessage = e.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _locationReady = false;
+        _locationMessage = 'GPS belum siap. Aktifkan lokasi sebelum presensi.';
+      });
+    } finally {
+      if (mounted) setState(() => _preparingLocation = false);
+    }
   }
 
   Future<void> _loadScheduleConfig() async {
@@ -626,6 +663,30 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   (IconData, String, Color, Color) _faceStatusStyle() {
+    if (_preparingLocation) {
+      return (
+        Icons.location_searching_rounded,
+        'Menyiapkan GPS untuk presensi...',
+        AppColors.primary,
+        AppColors.primaryLight,
+      );
+    }
+    if (_locationMessage != null && !_locationReady) {
+      return (
+        Icons.location_disabled_rounded,
+        _locationMessage!,
+        AppColors.error,
+        AppColors.errorLight,
+      );
+    }
+    if (_checkingGeofence) {
+      return (
+        Icons.location_searching_rounded,
+        'Memeriksa radius kantor...',
+        AppColors.primary,
+        AppColors.primaryLight,
+      );
+    }
     if (_processing) {
       return (
         Icons.hourglass_top_rounded,
@@ -662,16 +723,25 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     }
     return (
       Icons.face_rounded,
-      _devSettings.requireBlinkForAttendance
-          ? 'Tekan presensi, kedipkan mata, lalu tatap lurus ke kamera.'
-          : 'Tekan presensi, lalu tatap lurus ke kamera.',
+      _locationReady
+          ? (_devSettings.requireBlinkForAttendance
+                ? 'GPS siap. Tekan presensi, kedipkan mata, lalu tatap lurus ke kamera.'
+                : 'GPS siap. Tekan presensi, lalu tatap lurus ke kamera.')
+          : (_devSettings.requireBlinkForAttendance
+                ? 'Tekan presensi, kedipkan mata, lalu tatap lurus ke kamera.'
+                : 'Tekan presensi, lalu tatap lurus ke kamera.'),
       AppColors.textSecondary,
       AppColors.background,
     );
   }
 
   Widget _buildActionButton() {
-    final disabled = _processing || _isCheckedOut || !widget.isActive;
+    final disabled =
+        _processing ||
+        _checkingGeofence ||
+        _preparingLocation ||
+        _isCheckedOut ||
+        !widget.isActive;
     final label = _isCheckedOut
         ? 'Presensi Selesai'
         : _isCheckedIn
@@ -700,7 +770,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               )
             : Icon(icon),
         label: Text(
-          _processing ? 'Menyimpan...' : label,
+          _processing
+              ? 'Menyimpan...'
+              : _preparingLocation
+              ? 'Menyiapkan GPS...'
+              : _checkingGeofence
+              ? 'Cek lokasi...'
+              : label,
           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
         ),
         style: ElevatedButton.styleFrom(
@@ -719,7 +795,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   Future<void> _handleButtonTap() async {
-    if (_isCheckedOut || _processing) return;
+    if (_isCheckedOut ||
+        _processing ||
+        _checkingGeofence ||
+        _preparingLocation) {
+      return;
+    }
     if (_isCheckedIn) {
       final confirmed = await _confirmCheckOut();
       if (!confirmed) return;
@@ -728,8 +809,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final validation = await _validateScheduleBeforeScan();
     if (validation == null) return;
 
+    final geofenceValidation = await _validateGeofenceBeforeScan();
+    if (geofenceValidation == null) return;
+
     setState(() {
       _pendingScheduleValidation = validation;
+      _pendingGeofenceValidation = geofenceValidation;
       _checkingFace = true;
       _faceMatched = false;
       _matchFailed = false;
@@ -803,6 +888,64 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       _showResult(success: false, message: 'Gagal validasi jadwal: $e');
       return null;
     }
+  }
+
+  Future<GeofenceValidationResult?> _validateGeofenceBeforeScan() async {
+    final uid = AuthService.instance.currentUserId;
+    if (uid == null) return null;
+
+    setState(() {
+      _checkingGeofence = true;
+      _matchFailed = false;
+      _faceMatched = false;
+      _lastSimilarity = null;
+      _bestTarget = null;
+    });
+
+    try {
+      final validation = await AttendanceGeofenceService.instance.validate(uid);
+      if (validation.allowed) return validation;
+
+      _showResult(
+        success: false,
+        message: _geofenceFailureMessage(validation),
+        icon: Icons.location_off_rounded,
+      );
+      return null;
+    } on GeofencePermissionException catch (e) {
+      _showResult(
+        success: false,
+        message: e.message,
+        icon: Icons.location_disabled_rounded,
+      );
+      return null;
+    } catch (e) {
+      _showResult(
+        success: false,
+        message: 'Gagal validasi lokasi kantor: $e',
+        icon: Icons.location_off_rounded,
+      );
+      return null;
+    } finally {
+      if (mounted) setState(() => _checkingGeofence = false);
+    }
+  }
+
+  String _geofenceFailureMessage(GeofenceValidationResult validation) {
+    if (validation.geofenceStatus == 'outside') {
+      final distance = validation.distanceMeters;
+      final radius = validation.radiusMeters;
+      final detail = distance != null && radius != null
+          ? ' Jarak kamu ${distance}m dari kantor, radius yang diizinkan ${radius}m.'
+          : '';
+      return 'Presensi gagal. Silakan lakukan presensi di dalam radius kantor.$detail';
+    }
+
+    if (validation.message.isNotEmpty) {
+      return validation.message;
+    }
+
+    return 'Presensi gagal. Karyawan kantor wajib presensi di dalam radius kantor.';
   }
 
   Future<bool> _onFaceDetectedForAttendance({
@@ -1046,6 +1189,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           faceSimilarity: faceSimilarity,
           faceThreshold: _faceMatchThreshold,
           scheduleValidation: _pendingScheduleValidation,
+          geofenceValidation: _pendingGeofenceValidation,
           selectedShiftId: _selectedShift?.id,
         );
         if (!mounted) return;
@@ -1065,6 +1209,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           faceSimilarity: faceSimilarity,
           faceThreshold: _faceMatchThreshold,
           scheduleValidation: _pendingScheduleValidation,
+          geofenceValidation: _pendingGeofenceValidation,
           selectedShiftId: _todayRecord?.selectedShiftId ?? _selectedShift?.id,
           checkoutReason:
               _pendingScheduleValidation?.scheduleStatus ==

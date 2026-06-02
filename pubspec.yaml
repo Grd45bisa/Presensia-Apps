@@ -53,6 +53,7 @@ dependencies:
   path: ^1.9.0
   pdf: ^3.11.1
   printing: ^5.13.2
+  geolocator: ^14.0.2
 
 dev_dependencies:
   flutter_test:

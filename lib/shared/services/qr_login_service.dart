@@ -23,7 +23,7 @@ class QrLoginService {
 
   static const _defaultBaseUrl = String.fromEnvironment(
     'PRESENSIA_API_BASE_URL',
-    defaultValue: 'https://testing.kitapunya.web.id',
+    defaultValue: 'https://apipre.kitapunya.web.id',
   );
 
   Future<void> loginWithQrPayload(String payload) async {
@@ -50,11 +50,11 @@ class QrLoginService {
           .timeout(_requestTimeout);
     } on TimeoutException {
       throw const QrLoginException(
-        'Backend terlalu lama merespons QR Login. Pastikan tunnel testing.kitapunya.web.id dan Supabase sedang stabil, lalu coba QR baru.',
+        'Backend terlalu lama merespons QR Login. Pastikan apipre.kitapunya.web.id dan Supabase sedang stabil, lalu coba QR baru.',
       );
     } catch (_) {
       throw const QrLoginException(
-        'Tidak bisa terhubung ke backend. Pastikan testing.kitapunya.web.id aktif dan mengarah ke server backend.',
+        'Tidak bisa terhubung ke backend. Pastikan apipre.kitapunya.web.id aktif dan mengarah ke server backend.',
       );
     }
 

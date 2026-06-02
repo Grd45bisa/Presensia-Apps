@@ -13,7 +13,7 @@ class DeviceSessionService {
 
   static const _apiBaseUrl = String.fromEnvironment(
     'PRESENSIA_API_BASE_URL',
-    defaultValue: 'https://testing.kitapunya.web.id',
+    defaultValue: 'https://apipre.kitapunya.web.id',
   );
   static const _heartbeatInterval = Duration(seconds: 10);
   static const _requestTimeout = Duration(seconds: 10);
@@ -61,13 +61,17 @@ class DeviceSessionService {
       if (response.statusCode == 401 ||
           response.statusCode == 403 ||
           response.statusCode == 404) {
-        stop();
-        await AuthService.instance.signOut();
+        await _forceLogout();
       }
     } catch (_) {
       // Jangan logout hanya karena koneksi backend sementara gagal.
     } finally {
       _isChecking = false;
     }
+  }
+
+  Future<void> _forceLogout() async {
+    stop();
+    await AuthService.instance.signOut();
   }
 }

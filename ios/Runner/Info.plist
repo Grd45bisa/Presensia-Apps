@@ -4,6 +4,8 @@
 	<dict>
 		<key>NSCameraUsageDescription</key>
 		<string>Aplikasi membutuhkan akses kamera untuk verifikasi wajah saat absensi.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<string>Aplikasi membutuhkan lokasi untuk memastikan presensi dilakukan di dalam radius kantor.</string>
 		<key>CADisableMinimumFrameDurationOnPhone</key>
 		<true/>
 		<key>CFBundleDevelopmentRegion</key>

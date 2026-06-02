@@ -9,7 +9,7 @@ class AttendanceScheduleService {
 
   static const String _baseUrl = String.fromEnvironment(
     'PRESENSIA_BACKEND_URL',
-    defaultValue: 'https://testing.kitapunya.web.id',
+    defaultValue: 'https://apipre.kitapunya.web.id',
   );
 
   Future<AttendanceScheduleConfig> fetchConfig() async {
