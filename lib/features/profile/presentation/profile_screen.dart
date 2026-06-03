@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../shared/models/app_models.dart';
-import '../../../shared/services/attendance_dev_settings.dart';
 import '../../../shared/services/auth_service.dart';
 import '../../../shared/services/face/embedding_sync_service.dart';
 import '../../../shared/store/app_store.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../enrollment/presentation/enrollment_screen.dart';
-import 'face_ai_lab_screen.dart';
 import '../controller/profile_controller.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -18,7 +16,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _controller = ProfileController();
-  final _devSettings = AttendanceDevSettings.instance;
   bool _isEnrolled = false;
   bool _enrollChecked = false;
 
@@ -52,13 +49,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> _goToFaceAiLab() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const FaceAiLabScreen()),
-    );
-  }
-
   @override
   void dispose() {
     _controller.dispose();
@@ -68,11 +58,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: Listenable.merge([
-        AppStore.instance,
-        _controller,
-        _devSettings,
-      ]),
+      listenable: Listenable.merge([AppStore.instance, _controller]),
       builder: (context, _) {
         final profile = AppStore.instance.profile;
         final bottomPadding = _screenBottomPadding(context);
@@ -536,48 +522,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             endIndent: 16,
             color: AppColors.border,
           ),
-          InkWell(
-            onTap: _goToFaceAiLab,
-            borderRadius: const BorderRadius.only(
-              bottomLeft: Radius.circular(14),
-              bottomRight: Radius.circular(14),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: AppColors.warningLight,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.science_rounded,
-                      size: 16,
-                      color: AppColors.warning,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Face AI Lab',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                  ),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.textSecondary,
-                    size: 20,
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -610,20 +554,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           _divider(),
-          _settingRow(
-            icon: Icons.visibility_rounded,
-            iconColor: AppColors.primary,
-            iconBg: AppColors.primaryLight,
-            label: 'Liveness blink',
-            subtitle: 'Diatur oleh admin dari dashboard',
-            trailing: Switch(
-              value: _devSettings.requireBlinkForAttendance,
-              onChanged: null,
-              activeThumbColor: AppColors.primary,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-          ),
-          _divider(),
           InkWell(
             onTap: () => _showChangePasswordSheet(context),
             borderRadius: const BorderRadius.only(
@@ -641,32 +571,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 color: AppColors.textSecondary,
                 size: 20,
               ),
-            ),
-          ),
-          _divider(),
-          _settingRow(
-            icon: Icons.language_rounded,
-            iconColor: AppColors.primary,
-            iconBg: AppColors.primaryLight,
-            label: 'Bahasa',
-            subtitle: 'Tampilan aplikasi',
-            trailing: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Indonesia',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-                SizedBox(width: 2),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  color: AppColors.textSecondary,
-                  size: 20,
-                ),
-              ],
             ),
           ),
           _divider(),

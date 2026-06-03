@@ -24,6 +24,7 @@ class _CalendarScreenState extends State<CalendarScreen>
   static const _uuid = Uuid();
   static const double _fabBottomOffset = 0;
   static const double _contentBottomGap = 184;
+  bool get _showInternalCalendarActions => false;
   DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime(
     DateTime.now().year,
@@ -260,17 +261,18 @@ class _CalendarScreenState extends State<CalendarScreen>
                 color: AppColors.textPrimary,
               ),
             ),
-            IconButton(
-              tooltip: 'Pengaturan hari libur',
-              splashRadius: 20,
-              padding: const EdgeInsets.all(8),
-              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-              onPressed: _showOffDaySettings,
-              icon: const Icon(
-                Icons.settings_rounded,
-                color: AppColors.textPrimary,
+            if (_showInternalCalendarActions)
+              IconButton(
+                tooltip: 'Pengaturan hari libur',
+                splashRadius: 20,
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                onPressed: _showOffDaySettings,
+                icon: const Icon(
+                  Icons.settings_rounded,
+                  color: AppColors.textPrimary,
+                ),
               ),
-            ),
             const SizedBox(width: 4),
           ],
         ),
@@ -336,15 +338,17 @@ class _CalendarScreenState extends State<CalendarScreen>
                   _showReminderSheet(date: _selectedDay);
                 },
               ),
-              const SizedBox(height: 10),
-              _childBubble(
-                icon: Icons.edit_calendar_rounded,
-                label: 'Kegiatan Manual',
-                onTap: () {
-                  _closeFab();
-                  _showManualActivitySheet(date: _selectedDay);
-                },
-              ),
+              if (_showInternalCalendarActions) ...[
+                const SizedBox(height: 10),
+                _childBubble(
+                  icon: Icons.edit_calendar_rounded,
+                  label: 'Kegiatan Manual',
+                  onTap: () {
+                    _closeFab();
+                    _showManualActivitySheet(date: _selectedDay);
+                  },
+                ),
+              ],
               const SizedBox(height: 14),
             ],
           ),
@@ -1302,6 +1306,43 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   Widget _buildActionRow(AttendanceRecord? record, DateTime day) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.info_outline_rounded,
+              size: 18,
+              color: AppColors.textSecondary,
+            ),
+            SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                'Perubahan data presensi dilakukan oleh admin melalui dashboard.',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget buildAdminActionRow(AttendanceRecord? record, DateTime day) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       child: Row(

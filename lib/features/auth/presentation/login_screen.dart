@@ -9,7 +9,6 @@ import '../../../shared/store/app_store.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../main_nav/main_screen.dart';
 import '../controller/auth_controller.dart';
-import 'forgot_password_screen.dart';
 import 'qr_login_screen.dart';
 import 'widgets/auth_widgets.dart';
 
@@ -80,14 +79,6 @@ class _LoginScreenState extends State<LoginScreen> {
             FadeTransition(opacity: anim, child: child),
         transitionDuration: const Duration(milliseconds: 260),
       ),
-    );
-  }
-
-  void _goForgotPassword() {
-    _controller.reset();
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
     );
   }
 
@@ -282,7 +273,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Masuk dengan QR atau email yang terdaftar.',
+          'Masuk dengan QR atau email karyawan yang terdaftar.',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 13,
@@ -297,7 +288,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Center(
           child: TextButton.icon(
             onPressed: _toggleAdminMode,
-            icon: const Icon(Icons.admin_panel_settings_outlined, size: 18),
+            icon: const Icon(Icons.mail_outline_rounded, size: 18),
             label: const Text('Masuk Dengan Email'),
             style: TextButton.styleFrom(
               foregroundColor: AppColors.textSecondary,
@@ -348,67 +339,54 @@ class _LoginScreenState extends State<LoginScreen> {
               ErrorBanner(message: _controller.errorMessage!),
             ],
             const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                GestureDetector(
-                  onTap: _goForgotPassword,
-                  child: Text(
-                    'Lupa Password?',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textSecondary.withValues(alpha: 0.9),
-                    ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton(
+                onPressed: _controller.isLoading
+                    ? null
+                    : () {
+                        TextInput.finishAutofillContext();
+                        _submit();
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  disabledBackgroundColor: AppColors.primary.withValues(
+                    alpha: 0.55,
+                  ),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 14,
                   ),
                 ),
-                ElevatedButton(
-                  onPressed: _controller.isLoading
-                      ? null
-                      : () {
-                          TextInput.finishAutofillContext();
-                          _submit();
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    disabledBackgroundColor: AppColors.primary.withValues(
-                      alpha: 0.55,
-                    ),
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
-                    ),
-                  ),
-                  child: _controller.isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.login_rounded, size: 16),
-                            SizedBox(width: 8),
-                            Text(
-                              'Masuk',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
+                child: _controller.isLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
                         ),
-                ),
-              ],
+                      )
+                    : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.login_rounded, size: 16),
+                          SizedBox(width: 8),
+                          Text(
+                            'Masuk',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
             ),
           ],
         ),
