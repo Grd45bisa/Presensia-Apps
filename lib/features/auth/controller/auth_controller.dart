@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/services/auth_service.dart';
+import '../../../shared/services/device_session_service.dart';
 import '../../../shared/services/profile_service.dart';
 import '../../../shared/services/supabase_client.dart';
 
@@ -26,27 +27,42 @@ class AuthController extends ChangeNotifier {
 
   Future<bool> signIn({required String email, required String password}) async {
     _set(AuthStatus.loading);
+    AuthResponse response;
     try {
-      await AuthService.instance.signIn(email: email, password: password);
-
-      final user = AuthService.instance.currentUser;
-      if (user == null) {
-        await AuthService.instance.signOut();
-        _set(AuthStatus.error, 'Sesi login tidak valid. Silakan coba lagi.');
-        return false;
-      }
-
-      await ProfileService.instance.ensureProfileExists(user);
-      _set(AuthStatus.success);
-      return true;
+      response = await AuthService.instance.signIn(
+        email: email,
+        password: password,
+      );
     } on AuthException catch (e) {
       _set(AuthStatus.error, _mapAuthError(e.message));
       return false;
     } catch (_) {
-      await AuthService.instance.signOut();
       _set(AuthStatus.error, 'Tidak dapat terhubung. Periksa koneksi Anda.');
       return false;
     }
+
+    final user = AuthService.instance.currentUser ?? response.user;
+    if (user == null) {
+      _set(AuthStatus.error, 'Sesi login tidak valid. Silakan coba lagi.');
+      return false;
+    }
+
+    try {
+      await ProfileService.instance.ensureProfileExists(user);
+
+      // Device guard is disabled by default during development, so any valid
+      // Supabase email/password account can stay signed in. Enable it later
+      // with --dart-define=PRESENSIA_DEVICE_GUARD_ENABLED=true.
+      if (DeviceSessionService.instance.isDeviceGuardEnabled) {
+        await DeviceSessionService.instance.registerDevice();
+      }
+    } catch (_) {
+      // Development mode: jangan logout kalau setup profil/device belum siap.
+      // Session Supabase tetap valid selama email/password benar.
+    }
+
+    _set(AuthStatus.success);
+    return true;
   }
 
   // ─── FORGOT PASSWORD ──────────────────────────────────────────────────────
