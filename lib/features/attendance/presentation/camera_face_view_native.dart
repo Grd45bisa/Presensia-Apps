@@ -250,7 +250,7 @@ class CameraFaceViewState extends State<CameraFaceView>
       // medium resolution: lighter frames → smoother preview while inferencing.
       final ctrl = CameraController(
         front,
-        ResolutionPreset.medium,
+        widget.liveMode ? ResolutionPreset.medium : ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: Platform.isAndroid
             ? ImageFormatGroup.nv21
@@ -553,9 +553,8 @@ class CameraFaceViewState extends State<CameraFaceView>
         return;
       }
 
-      final fullImage = Platform.isAndroid ? null : _cameraImageToImage(image, rotation);
-      if (Platform.isIOS && fullImage == null) return;
-
+      final fullImage = _cameraImageToImage(image, rotation);
+      if (fullImage == null) return;
       final best = _SampledFrame(
         fullImage: fullImage,
         inputImage: inputImage,
