@@ -125,12 +125,14 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<Widget> _prepareStartScreen() async {
     if (AuthService.instance.isSignedIn) {
-      try {
-        await AppStore.instance.loadFromCloud().timeout(_cloudReadyTimeout);
-      } catch (_) {
-        // Jangan tahan splash selamanya. Data bisa tersinkron setelah screen utama hidup.
-      }
+      // Load from session cache first for instant UI.
+      await AppStore.instance.loadFromCache();
       _activateSignedInServices();
+      // Fire loadFromCloud in background — don't block navigation.
+      // Once it completes, the session cache is automatically cleared.
+      unawaited(
+        AppStore.instance.loadFromCloud().timeout(_cloudReadyTimeout).catchError((_) {}),
+      );
       return const MainScreen();
     }
 

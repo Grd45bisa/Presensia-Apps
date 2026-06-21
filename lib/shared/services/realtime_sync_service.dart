@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/app_models.dart';
 import '../providers/notification_provider.dart';
 import '../store/app_store.dart';
+import 'holiday_service.dart';
 import 'supabase_client.dart';
 
 /// Subscribes to all relevant Supabase tables via Realtime and patches
@@ -197,6 +198,26 @@ class RealtimeSyncService {
           ),
           callback: (_) => _onProjectsChanged(),
         )
+        // ── national_holidays ───────────────────────────────────────────────
+        // Daftar libur bersifat global, jadi tidak difilter per employee.
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'national_holidays',
+          callback: (_) => _onHolidaysChanged(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'national_holidays',
+          callback: (_) => _onHolidaysChanged(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'national_holidays',
+          callback: (_) => _onHolidaysChanged(),
+        )
         .subscribe();
   }
 
@@ -326,5 +347,16 @@ class RealtimeSyncService {
     _scheduleOnUiThread(() {
       AppStore.instance.notifyProjectsChanged();
     });
+  }
+
+  void _onHolidaysChanged() {
+    // Muat ulang kalender libur lalu segarkan jadwal pengingat agar
+    // hari libur baru otomatis diskip.
+    HolidayService.instance.load().then((_) {
+      _scheduleOnUiThread(() {
+        AppStore.instance.refreshBackgroundReminders();
+        NotificationProvider.instance.refresh();
+      });
+    }).catchError((_) {});
   }
 }

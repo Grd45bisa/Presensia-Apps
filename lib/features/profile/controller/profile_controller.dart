@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/models/app_models.dart';
 import '../../../shared/services/profile_service.dart';
 import '../../../shared/services/auth_service.dart';
+import '../../../shared/services/notification_service.dart';
 import '../../../shared/services/supabase_client.dart';
 import '../../../shared/store/app_store.dart';
 
@@ -68,10 +69,36 @@ class ProfileController extends ChangeNotifier {
     try {
       await ProfileService.instance.updateProfile(updated);
       AppStore.instance.setProfile(updated);
+      // Saat user mengaktifkan notifikasi, minta whitelist battery
+      // optimization supaya alarm tidak dibunuh OEM secara agresif.
+      if (enabled) {
+        _maybeRequestBatteryOptimization();
+      }
     } catch (_) {
       // Revert optimistic update
       AppStore.instance.setProfile(profile);
     }
+  }
+
+  // ─── REMINDER TIME SETTINGS ───────────────────────────────────────────────
+
+  /// Perbarui jam pengingat (check-in / check-out / tracker). Disimpan ke
+  /// work_schedule_settings, lalu pengingat terjadwal langsung di-refresh.
+  Future<bool> updateReminderSettings({
+    TimeOfDaySetting? checkIn,
+    TimeOfDaySetting? checkOut,
+    TimeOfDaySetting? tracker,
+    bool? reminderEnabled,
+  }) async {
+    final current = AppStore.instance.settings;
+    final next = current.copyWith(
+      checkInReminderTime: checkIn,
+      checkOutReminderTime: checkOut,
+      trackerReminderTime: tracker,
+      reminderEnabled: reminderEnabled,
+    );
+    AppStore.instance.updateSettings(next);
+    return true;
   }
 
   // ─── CHANGE PASSWORD ──────────────────────────────────────────────────────
@@ -121,5 +148,18 @@ class ProfileController extends ChangeNotifier {
       return 'Tidak dapat terhubung. Periksa koneksi Anda.';
     }
     return 'Terjadi kesalahan. Silakan coba lagi.';
+  }
+
+  /// Minta user whitelist battery optimization sekali — jangan spam setiap
+  /// buka app. Pakai flag SharedPreferences sederhana.
+  Future<void> _maybeRequestBatteryOptimization() async {
+    try {
+      final already = await NotificationService.instance
+          .isIgnoringBatteryOptimizations();
+      if (!already) {
+        await NotificationService.instance
+            .requestIgnoreBatteryOptimizations();
+      }
+    } catch (_) {}
   }
 }

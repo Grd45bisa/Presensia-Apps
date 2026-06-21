@@ -368,38 +368,109 @@ class ReminderEvent {
 
 // ─── WORK SCHEDULE SETTINGS ──────────────────────────────────────────────────
 
+/// Represents a wall-clock time of day (HH:MM) used for scheduling reminders.
+class TimeOfDaySetting {
+  final int hour;
+  final int minute;
+
+  const TimeOfDaySetting(this.hour, this.minute)
+    : assert(hour >= 0 && hour < 24),
+      assert(minute >= 0 && minute < 60);
+
+  static const TimeOfDaySetting defaultCheckIn = TimeOfDaySetting(8, 0);
+  static const TimeOfDaySetting defaultCheckOut = TimeOfDaySetting(17, 0);
+  static const TimeOfDaySetting defaultTracker = TimeOfDaySetting(13, 0);
+
+  /// Parses "HH:MM(:SS)?" strings coming from Supabase TIME columns.
+  factory TimeOfDaySetting.parse(String? value, TimeOfDaySetting fallback) {
+    if (value == null) return fallback;
+    final parts = value.split(':');
+    if (parts.length < 2) return fallback;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null || h < 0 || h > 23 || m < 0 || m > 59) {
+      return fallback;
+    }
+    return TimeOfDaySetting(h, m);
+  }
+
+  String toIsoString() =>
+      '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TimeOfDaySetting &&
+          runtimeType == other.runtimeType &&
+          hour == other.hour &&
+          minute == other.minute;
+
+  @override
+  int get hashCode => Object.hash(hour, minute);
+}
+
 class WorkScheduleSettings {
   final Set<int> offDays;
   final List<int> defaultReminderOffsetsInMinutes;
   final bool autoMarkMissingAttendance;
 
+  /// Reminder times the user can customise in Profile. They drive the
+  /// scheduled local notifications (AlarmManager) so reminders still fire
+  /// when the app is closed.
+  final TimeOfDaySetting checkInReminderTime;
+  final TimeOfDaySetting checkOutReminderTime;
+  final TimeOfDaySetting trackerReminderTime;
+  final bool reminderEnabled;
+
   const WorkScheduleSettings({
     required this.offDays,
     required this.defaultReminderOffsetsInMinutes,
     required this.autoMarkMissingAttendance,
+    this.checkInReminderTime = TimeOfDaySetting.defaultCheckIn,
+    this.checkOutReminderTime = TimeOfDaySetting.defaultCheckOut,
+    this.trackerReminderTime = TimeOfDaySetting.defaultTracker,
+    this.reminderEnabled = true,
   });
 
   factory WorkScheduleSettings.defaults() => const WorkScheduleSettings(
     offDays: {6, 7},
     defaultReminderOffsetsInMinutes: [15, 5],
     autoMarkMissingAttendance: true,
+    checkInReminderTime: TimeOfDaySetting.defaultCheckIn,
+    checkOutReminderTime: TimeOfDaySetting.defaultCheckOut,
+    trackerReminderTime: TimeOfDaySetting.defaultTracker,
+    reminderEnabled: true,
   );
 
   factory WorkScheduleSettings.fromJson(Map<String, dynamic> json) {
-    final offDays =
-        (json['off_days'] as List<dynamic>?)?.map((e) => e as int).toSet() ??
-        {6, 7};
-    final offsets =
-        (json['default_reminder_offsets_minutes'] as List<dynamic>?)
-            ?.map((e) => e as int)
-            .toList() ??
-        [15, 5];
+    final offDaysJson = json['off_days'] as List<dynamic>?;
+    final offDays = offDaysJson != null
+        ? offDaysJson.map((e) => e as int).toSet()
+        : <int>{6, 7};
+    final offsetsJson =
+        json['default_reminder_offsets_minutes'] as List<dynamic>?;
+    final offsets = offsetsJson != null
+        ? offsetsJson.map((e) => e as int).toList()
+        : <int>[15, 5];
 
     return WorkScheduleSettings(
       offDays: offDays,
       defaultReminderOffsetsInMinutes: offsets,
       autoMarkMissingAttendance:
           (json['auto_mark_missing_attendance'] as bool?) ?? false,
+      checkInReminderTime: TimeOfDaySetting.parse(
+        json['check_in_reminder_time'] as String?,
+        TimeOfDaySetting.defaultCheckIn,
+      ),
+      checkOutReminderTime: TimeOfDaySetting.parse(
+        json['check_out_reminder_time'] as String?,
+        TimeOfDaySetting.defaultCheckOut,
+      ),
+      trackerReminderTime: TimeOfDaySetting.parse(
+        json['tracker_reminder_time'] as String?,
+        TimeOfDaySetting.defaultTracker,
+      ),
+      reminderEnabled: (json['reminder_enabled'] as bool?) ?? true,
     );
   }
 
@@ -408,18 +479,30 @@ class WorkScheduleSettings {
     'off_days': offDays.toList(),
     'default_reminder_offsets_minutes': defaultReminderOffsetsInMinutes,
     'auto_mark_missing_attendance': autoMarkMissingAttendance,
+    'check_in_reminder_time': checkInReminderTime.toIsoString(),
+    'check_out_reminder_time': checkOutReminderTime.toIsoString(),
+    'tracker_reminder_time': trackerReminderTime.toIsoString(),
+    'reminder_enabled': reminderEnabled,
   };
 
   WorkScheduleSettings copyWith({
     Set<int>? offDays,
     List<int>? defaultReminderOffsetsInMinutes,
     bool? autoMarkMissingAttendance,
+    TimeOfDaySetting? checkInReminderTime,
+    TimeOfDaySetting? checkOutReminderTime,
+    TimeOfDaySetting? trackerReminderTime,
+    bool? reminderEnabled,
   }) => WorkScheduleSettings(
     offDays: offDays ?? this.offDays,
     defaultReminderOffsetsInMinutes:
         defaultReminderOffsetsInMinutes ?? this.defaultReminderOffsetsInMinutes,
     autoMarkMissingAttendance:
         autoMarkMissingAttendance ?? this.autoMarkMissingAttendance,
+    checkInReminderTime: checkInReminderTime ?? this.checkInReminderTime,
+    checkOutReminderTime: checkOutReminderTime ?? this.checkOutReminderTime,
+    trackerReminderTime: trackerReminderTime ?? this.trackerReminderTime,
+    reminderEnabled: reminderEnabled ?? this.reminderEnabled,
   );
 }
 

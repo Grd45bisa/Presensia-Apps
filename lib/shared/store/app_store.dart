@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import '../database/session_cache_db.dart';
 import '../models/app_models.dart';
 import '../services/attendance_service.dart';
 import '../services/worklog_service.dart';
 import '../services/reminder_service.dart';
+import '../services/holiday_service.dart';
 import '../services/schedule_settings_service.dart';
 import '../services/profile_service.dart';
 import '../services/auth_service.dart';
@@ -92,6 +94,9 @@ class AppStore extends ChangeNotifier {
     _attendance[dateKey(record.date)] = record;
     notifyListeners();
     _refreshBackgroundReminders();
+    // Jika sudah check-in, batalkan pengingat "belum check-in" hari itu;
+    // jika sudah check-out, batalkan juga pengingat check-out.
+    NotificationService.instance.cancelAttendanceRemindersFor(record.date);
   }
 
   void removeAttendance(DateTime date) {
@@ -115,9 +120,15 @@ class AppStore extends ChangeNotifier {
 
   void addWorklog(WorklogEntry entry) {
     final key = dateKey(entry.date);
+    final wasEmpty = (_worklogs[key] ?? const []).isEmpty;
     _worklogs[key] = [...(_worklogs[key] ?? []), entry];
     notifyListeners();
     _refreshBackgroundReminders();
+    // Begitu ada minimal satu worklog hari itu, batalkan pengingat
+    // "tracker belum diisi" supaya tidak muncul basi.
+    if (wasEmpty) {
+      NotificationService.instance.cancelTrackerReminderFor(entry.date);
+    }
   }
 
   void upsertWorklog(WorklogEntry entry) {
@@ -177,18 +188,38 @@ class AppStore extends ChangeNotifier {
   }
 
   void updateReminder(ReminderEvent event) {
-    final key = dateKey(event.startDateTime);
-    final list = _reminders[key] ?? [];
-    final idx = list.indexWhere((e) => e.id == event.id);
-    if (idx >= 0) {
-      _reminders[key] = [
-        ...list.sublist(0, idx),
-        event,
-        ...list.sublist(idx + 1),
-      ];
-      notifyListeners();
-      NotificationService.instance.scheduleReminder(event);
+    String? existingKey;
+    ReminderEvent? existingEvent;
+
+    for (final entry in _reminders.entries) {
+      for (final reminder in entry.value) {
+        if (reminder.id != event.id) continue;
+        existingKey = entry.key;
+        existingEvent = reminder;
+        break;
+      }
+      if (existingEvent != null) break;
     }
+
+    final newKey = dateKey(event.startDateTime);
+    if (existingKey != null) {
+      _reminders[existingKey] = (_reminders[existingKey] ?? [])
+          .where((e) => e.id != event.id)
+          .toList();
+      if ((_reminders[existingKey] ?? const []).isEmpty) {
+        _reminders.remove(existingKey);
+      }
+    }
+
+    _reminders[newKey] = [...(_reminders[newKey] ?? []), event]
+      ..sort((a, b) => a.startDateTime.compareTo(b.startDateTime));
+
+    notifyListeners();
+
+    if (existingEvent != null) {
+      NotificationService.instance.cancelReminder(existingEvent);
+    }
+    NotificationService.instance.scheduleReminder(event);
   }
 
   void removeReminder(ReminderEvent event) {
@@ -198,6 +229,55 @@ class AppStore extends ChangeNotifier {
         .toList();
     notifyListeners();
     NotificationService.instance.cancelReminder(event);
+  }
+
+  // ─── SESSION CACHE ────────────────────────────────────────────────────────
+
+  /// Load cached data from SQLite into memory. Returns true if any cache
+  /// was loaded. Called before loadFromCloud() for instant UI.
+  Future<bool> loadFromCache() async {
+    try {
+      final cached = await SessionCacheDb.instance.loadAll();
+      if (cached.profile == null) return false;
+
+      _profile = cached.profile;
+      if (cached.settings != null) {
+        _settings = cached.settings!;
+      }
+
+      _attendance.clear();
+      _attendance.addAll(cached.attendance);
+
+      _worklogs.clear();
+      _worklogs.addAll(cached.worklogs);
+
+      _reminders.clear();
+      _reminders.addAll(cached.reminders);
+
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Persist current in-memory state to SQLite session cache.
+  /// Called when the app is about to be terminated.
+  Future<void> saveToCache() async {
+    final p = _profile;
+    if (p == null) return;
+
+    try {
+      await SessionCacheDb.instance.saveAll(
+        profile: p,
+        settings: _settings,
+        attendance: Map.from(_attendance),
+        worklogs: _worklogs.map((k, v) => MapEntry(k, List.from(v))),
+        reminders: _reminders.map((k, v) => MapEntry(k, List.from(v))),
+      );
+    } catch (_) {
+      // Best-effort — don't let cache failures crash the app.
+    }
   }
 
   // ─── CLOUD LOAD ───────────────────────────────────────────────────────────
@@ -224,6 +304,7 @@ class AppStore extends ChangeNotifier {
         AttendanceService.instance.fetchMonthRecords(uid, now.year, now.month),
         WorklogService.instance.fetchMonthWorklogs(uid, now.year, now.month),
         ReminderService.instance.fetchMonthReminders(uid, now.year, now.month),
+        HolidayService.instance.load(),
       ]).timeout(_cloudLoadTimeout);
 
       _profile = results[0] as EmployeeProfile;
@@ -245,6 +326,9 @@ class AppStore extends ChangeNotifier {
         final key = dateKey(r.startDateTime);
         _reminders[key] = [...(_reminders[key] ?? []), r];
       }
+
+      // Cloud data loaded successfully — clear the session cache.
+      await SessionCacheDb.instance.clear();
     } finally {
       _loading = false;
       notifyListeners();
@@ -287,6 +371,7 @@ class AppStore extends ChangeNotifier {
     _attendance.clear();
     _worklogs.clear();
     _reminders.clear();
+    HolidayService.instance.clear();
     notifyListeners();
     NotificationService.instance.cancelBackgroundFallbackReminders();
   }
@@ -296,8 +381,13 @@ class AppStore extends ChangeNotifier {
     NotificationService.instance.refreshBackgroundFallbackReminders(
       settings: _settings,
       enabled: enabled,
+      holidays: HolidayService.instance.holidayKeys,
     );
   }
+
+  /// Public entry point untuk re-jadwal pengingat dari luar (mis. dari
+  /// RealtimeSyncService ketika kalender libur berubah).
+  void refreshBackgroundReminders() => _refreshBackgroundReminders();
 
   void _refreshCalendarReminderSchedules() {
     final enabled = _profile?.notificationsEnabled ?? true;

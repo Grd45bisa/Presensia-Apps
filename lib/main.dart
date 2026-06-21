@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'features/auth/presentation/reset_password_screen.dart';
 import 'features/auth/presentation/splash_screen.dart';
 import 'features/main_nav/main_screen.dart';
+import 'shared/database/session_cache_db.dart';
 import 'shared/providers/notification_provider.dart';
 import 'shared/services/attendance_dev_settings.dart';
 import 'shared/services/auth_service.dart';
@@ -23,10 +26,25 @@ void main() async {
   ]);
   await SupabaseClientService.initialize();
   AttendanceDevSettings.instance.startDatabaseSync();
-  if (!kIsWeb) {
-    await NotificationService.instance.init();
-  }
   runApp(const PresensiaApp());
+  unawaited(_bootstrapBackgroundServices());
+}
+
+Future<void> _bootstrapBackgroundServices() async {
+  if (kIsWeb) return;
+  try {
+    await NotificationService.instance.init().timeout(
+      const Duration(seconds: 6),
+    );
+  } catch (_) {}
+
+  try {
+    // Safety net: pastikan alarm terjadwal tetap ter-arm walaupun app lama
+    // tidak sempat dibuka (mis. setelah update atau force-stop).
+    await NotificationService.instance.rearmFromSnapshot().timeout(
+      const Duration(seconds: 4),
+    );
+  } catch (_) {}
 }
 
 class PresensiaApp extends StatefulWidget {
@@ -36,7 +54,7 @@ class PresensiaApp extends StatefulWidget {
   State<PresensiaApp> createState() => _PresensiaAppState();
 }
 
-class _PresensiaAppState extends State<PresensiaApp> {
+class _PresensiaAppState extends State<PresensiaApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
 
   // Event signedIn pertama saat app buka = restore session → SplashScreen yang handle.
@@ -46,7 +64,23 @@ class _PresensiaAppState extends State<PresensiaApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _listenAuthState();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Save session cache when the app is about to be destroyed or goes to background.
+    if (state == AppLifecycleState.detached ||
+        state == AppLifecycleState.paused) {
+      AppStore.instance.saveToCache();
+    }
   }
 
   void _listenAuthState() {
@@ -87,6 +121,7 @@ class _PresensiaAppState extends State<PresensiaApp> {
           DeviceSessionService.instance.stop();
           RealtimeSyncService.instance.unsubscribe();
           AppStore.instance.clear();
+          SessionCacheDb.instance.clear();
           nav.pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const SplashScreen()),
             (_) => false,

@@ -83,6 +83,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _sectionLabel('Pengaturan'),
                     const SizedBox(height: 8),
                     _buildSettingsCard(profile),
+                    const SizedBox(height: 18),
+                    _sectionLabel('Pengaturan Pengingat'),
+                    const SizedBox(height: 8),
+                    _buildReminderSettingsCard(),
                     const SizedBox(height: 28),
                     _buildLogoutButton(context),
                   ],
@@ -645,6 +649,171 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
+  }
+
+  // ─── REMINDER SETTINGS CARD ────────────────────────────────────────────────
+
+  Widget _buildReminderSettingsCard() {
+    final settings = AppStore.instance.settings;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          // Toggle pengingat on/off
+          _settingRow(
+            icon: Icons.alarm_outlined,
+            iconColor: AppColors.primary,
+            iconBg: AppColors.primaryLight,
+            label: 'Pengingat Harian',
+            subtitle: settings.reminderEnabled
+                ? 'Aktif — jam di bawah ini digunakan'
+                : 'Pengingat saat ini nonaktif',
+            trailing: Switch(
+              value: settings.reminderEnabled,
+              onChanged: (val) => _controller.updateReminderSettings(
+                reminderEnabled: val,
+              ),
+              activeThumbColor: AppColors.primary,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+          if (settings.reminderEnabled) ...[
+            _divider(),
+            _reminderTimeRow(
+              icon: Icons.login_rounded,
+              iconColor: AppColors.primary,
+              iconBg: AppColors.primaryLight,
+              label: 'Pengingat Check-in',
+              time: settings.checkInReminderTime,
+              onTap: () => _pickTime(
+                context,
+                settings.checkInReminderTime,
+                (t) => _controller.updateReminderSettings(checkIn: t),
+              ),
+            ),
+            _divider(),
+            _reminderTimeRow(
+              icon: Icons.timer_outlined,
+              iconColor: AppColors.warning,
+              iconBg: AppColors.warningLight,
+              label: 'Pengingat Tracker',
+              time: settings.trackerReminderTime,
+              onTap: () => _pickTime(
+                context,
+                settings.trackerReminderTime,
+                (t) => _controller.updateReminderSettings(tracker: t),
+              ),
+            ),
+            _divider(),
+            _reminderTimeRow(
+              icon: Icons.logout_rounded,
+              iconColor: AppColors.missing,
+              iconBg: AppColors.missingLight,
+              label: 'Pengingat Check-out',
+              time: settings.checkOutReminderTime,
+              onTap: () => _pickTime(
+                context,
+                settings.checkOutReminderTime,
+                (t) => _controller.updateReminderSettings(checkOut: t),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _reminderTimeRow({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String label,
+    required TimeOfDaySetting time,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: const BorderRadius.only(
+        bottomLeft: Radius.circular(14),
+        bottomRight: Radius.circular(14),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 16, color: iconColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Text(
+                '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textSecondary,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickTime(
+    BuildContext context,
+    TimeOfDaySetting current,
+    ValueChanged<TimeOfDaySetting> onChanged,
+  ) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: current.hour, minute: current.minute),
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(alwaysUse24HourFormat: true),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null && mounted) {
+      onChanged(TimeOfDaySetting(picked.hour, picked.minute));
+    }
   }
 
   Widget _divider() => const Divider(

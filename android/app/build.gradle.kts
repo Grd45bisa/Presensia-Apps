@@ -47,4 +47,7 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // Dipakai native ReminderScheduler (NotificationCompat) untuk notifikasi
+    // yang dipicu AlarmManager saat app tertutup.
+    implementation("androidx.core:core-ktx:1.13.1")
 }

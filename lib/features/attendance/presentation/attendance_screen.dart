@@ -77,7 +77,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     _checkEnrollmentStatus();
     _loadScheduleConfig();
     _prepareLocationAccess();
-    unawaited(FaceRecognitionService.instance.init());
   }
 
   Future<void> _prepareLocationAccess() async {
@@ -972,11 +971,23 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         return true;
       }
 
-      if (fullImage == null) return false;
-      final query = await FaceRecognitionService.instance.extractEmbedding(
-        fullImage,
-        face,
-      );
+      final List<double>? query;
+      if (nv21Bytes != null) {
+        query = await FaceRecognitionService.instance.extractEmbeddingFromNv21(
+          nv21Bytes: nv21Bytes,
+          width: rawWidth,
+          height: rawHeight,
+          rotation: rotation,
+          face: face,
+          enforceQuality: false, // Already filtered in camera view
+        );
+      } else {
+        if (fullImage == null) return false;
+        query = await FaceRecognitionService.instance.extractEmbedding(
+          fullImage,
+          face,
+        );
+      }
       if (query == null || query.isEmpty) {
         return false;
       }

@@ -2197,7 +2197,6 @@ class _CalendarScreenState extends State<CalendarScreen>
                         }
                         // Pop first, then update store to avoid _dependents assertion
                         if (ctx.mounted) Navigator.pop(ctx);
-                        NotificationService.instance.scheduleReminder(saved);
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           if (existing != null) {
                             _store.updateReminder(saved);
