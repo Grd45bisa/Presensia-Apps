@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
 import 'package:uuid/uuid.dart';
@@ -1306,6 +1307,9 @@ class _CalendarScreenState extends State<CalendarScreen>
   }
 
   Widget _buildActionRow(AttendanceRecord? record, DateTime day) {
+    if (kDebugMode) {
+      return buildAdminActionRow(record, day);
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       child: Container(
