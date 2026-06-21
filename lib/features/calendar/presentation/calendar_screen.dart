@@ -864,7 +864,7 @@ class _CalendarScreenState extends State<CalendarScreen>
           ],
 
           const Divider(height: 1, color: AppColors.border),
-          buildAdminActionRow(record, day),
+          _buildActionRow(record, day),
         ],
       ),
     );
@@ -1305,6 +1305,42 @@ class _CalendarScreenState extends State<CalendarScreen>
     );
   }
 
+  Widget _buildActionRow(AttendanceRecord? record, DateTime day) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.info_outline_rounded,
+              size: 18,
+              color: AppColors.textSecondary,
+            ),
+            SizedBox(width: 9),
+            Expanded(
+              child: Text(
+                'Perubahan data presensi dilakukan oleh admin melalui dashboard.',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget buildAdminActionRow(AttendanceRecord? record, DateTime day) {
     return Padding(
