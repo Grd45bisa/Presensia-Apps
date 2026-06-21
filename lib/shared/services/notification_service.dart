@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 import '../models/app_models.dart';
@@ -126,10 +127,24 @@ class NotificationService {
 
   final _plugin = FlutterLocalNotificationsPlugin();
   bool _initialized = false;
+  Future<void>? _initFuture;
 
-  Future<void> init() async {
-    if (_initialized) return;
+  Future<void> init() {
+    return _initFuture ??= _doInit();
+  }
+
+  Future<void> _doInit() async {
     tz_data.initializeTimeZones();
+    try {
+      final tzInfo = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(tzInfo.identifier));
+      debugPrint('[NotifService] timezone set to: ${tzInfo.identifier}');
+    } catch (e) {
+      debugPrint('[NotifService] timezone detection failed: $e, falling back to UTC');
+      try {
+        tz.setLocalLocation(tz.getLocation('UTC'));
+      } catch (_) {}
+    }
 
     const android = AndroidInitializationSettings(_notificationIcon);
     const ios = DarwinInitializationSettings(
@@ -142,16 +157,14 @@ class NotificationService {
       const InitializationSettings(android: android, iOS: ios),
     );
     _initialized = true;
-    unawaited(_postInitSetup());
-  }
 
-  Future<void> _postInitSetup() async {
+    // Request permissions synchronously so they are granted before any
+    // scheduling attempt. Do NOT cancelAll() here — that was wiping
+    // legitimately scheduled reminders.
     try {
-      await _plugin.cancelAll().timeout(const Duration(seconds: 2));
+      await _requestPermissions().timeout(const Duration(seconds: 5));
     } catch (_) {}
-    try {
-      await _requestPermissions().timeout(const Duration(seconds: 4));
-    } catch (_) {}
+    debugPrint('[NotifService] init complete, tz.local=${tz.local.name}');
   }
 
   Future<void> _requestPermissions() async {
@@ -211,48 +224,69 @@ class NotificationService {
 
   // ── Scheduled reminders (calendar events) ─────────────────────────────────
 
+  int _reminderNotificationId(String eventId, int offset) {
+    return (eventId.hashCode ^ offset).toSigned(31);
+  }
+
   Future<void> scheduleReminder(ReminderEvent event) async {
     if (!_initialized) await init();
     await cancelReminder(event);
 
-    for (final offset in _effectiveReminderOffsets(event)) {
+    final offsets = _effectiveReminderOffsets(event);
+    debugPrint('[NotifService] scheduleReminder "${event.title}" '
+        'at=${event.startDateTime}, offsets=$offsets');
+
+    for (final offset in offsets) {
       final notifTime =
           event.startDateTime.subtract(Duration(minutes: offset));
-      if (notifTime.isBefore(DateTime.now())) continue;
+      if (notifTime.isBefore(DateTime.now())) {
+        debugPrint('[NotifService]   skip offset=$offset (in the past: $notifTime)');
+        continue;
+      }
 
-      final id = event.id.hashCode ^ offset;
+      final id = _reminderNotificationId(event.id, offset);
+      final title = _buildReminderTitle(event, offset);
       final body = _buildReminderBody(event, offset);
+      final scheduledTz = tz.TZDateTime.from(notifTime, tz.local);
+
+      debugPrint('[NotifService]   scheduling id=$id offset=${offset}m '
+          'at=$scheduledTz (tz=${tz.local.name})');
 
       final ch = NotifChannel.reminders;
-      await _zonedSchedule(
-        id,
-        _buildReminderTitle(event, offset),
-        body,
-        tz.TZDateTime.from(notifTime, tz.local),
-        NotificationDetails(
-          android: AndroidNotificationDetails(
-            ch.channelId,
-            ch.channelName,
-            channelDescription: ch.channelDesc,
-            importance: ch.importance,
-            priority: ch.priority,
-            icon: _notificationIcon,
-            largeIcon: largeIcon,
+      try {
+        await _zonedSchedule(
+          id,
+          title,
+          body,
+          scheduledTz,
+          NotificationDetails(
+            android: AndroidNotificationDetails(
+              ch.channelId,
+              ch.channelName,
+              channelDescription: ch.channelDesc,
+              importance: ch.importance,
+              priority: ch.priority,
+              icon: _notificationIcon,
+              largeIcon: largeIcon,
+            ),
+            iOS: const DarwinNotificationDetails(
+              presentAlert: true,
+              presentBadge: true,
+              presentSound: true,
+            ),
           ),
-          iOS: const DarwinNotificationDetails(
-            presentAlert: true,
-            presentBadge: true,
-            presentSound: true,
-          ),
-        ),
-      );
+        );
+        debugPrint('[NotifService]   ✓ scheduled OK id=$id');
+      } catch (e) {
+        debugPrint('[NotifService]   ✗ scheduling FAILED id=$id: $e');
+      }
     }
   }
 
   Future<void> cancelReminder(ReminderEvent event) async {
     if (!_initialized) await init();
     for (final offset in _effectiveReminderOffsets(event)) {
-      await _plugin.cancel(event.id.hashCode ^ offset);
+      await _plugin.cancel(_reminderNotificationId(event.id, offset));
     }
   }
 
@@ -452,17 +486,23 @@ class NotificationService {
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
       );
-    } catch (_) {
-      await _plugin.zonedSchedule(
-        id,
-        title,
-        body,
-        scheduledDate,
-        notificationDetails,
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-      );
+    } catch (e) {
+      debugPrint('[NotifService] exact alarm failed ($e), trying inexact...');
+      try {
+        await _plugin.zonedSchedule(
+          id,
+          title,
+          body,
+          scheduledDate,
+          notificationDetails,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+      } catch (e2) {
+        debugPrint('[NotifService] inexact alarm also failed: $e2');
+        rethrow;
+      }
     }
   }
 

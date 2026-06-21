@@ -92,23 +92,50 @@ class ReportPdfService {
     );
 
     doc.addPage(
-      pw.MultiPage(
+      pw.Page(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(36),
-        header: (ctx) => _buildHeader(data, ctx),
-        footer: (ctx) => _buildFooter(ctx),
-        build: (ctx) => [
-          pw.SizedBox(height: 16),
-          _buildEmployeeCard(data),
-          pw.SizedBox(height: 16),
-          _buildStatsGrid(data),
-          pw.SizedBox(height: 16),
-          _buildDistributionSection(data),
-          pw.SizedBox(height: 16),
-          _buildBarChart(data),
-          pw.SizedBox(height: 16),
-          _buildInsightSection(data),
-        ],
+        margin: const pw.EdgeInsets.all(24),
+        build: (ctx) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _buildHeader(data),
+              pw.SizedBox(height: 10),
+              _buildEmployeeCard(data),
+              pw.SizedBox(height: 12),
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(
+                    flex: 5,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        _buildStatsGrid(data),
+                        pw.SizedBox(height: 10),
+                        _buildDistributionSection(data),
+                      ],
+                    ),
+                  ),
+                  pw.SizedBox(width: 14),
+                  pw.Expanded(
+                    flex: 5,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        _buildBarChart(data),
+                        pw.SizedBox(height: 10),
+                        _buildInsightSection(data),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              pw.Spacer(),
+              _buildFooter(ctx),
+            ],
+          );
+        },
       ),
     );
 
@@ -117,7 +144,7 @@ class ReportPdfService {
 
   // ── Header ────────────────────────────────────────────────────────────────
 
-  static pw.Widget _buildHeader(ReportPdfData data, pw.Context ctx) {
+  static pw.Widget _buildHeader(ReportPdfData data) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -130,40 +157,40 @@ class ReportPdfService {
                 pw.Text(
                   'Presensia',
                   style: pw.TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: pw.FontWeight.bold,
                     color: _primaryColor,
                   ),
                 ),
-                pw.SizedBox(height: 2),
+                pw.SizedBox(height: 1),
                 pw.Text(
                   'Laporan Performa Karyawan',
-                  style: pw.TextStyle(fontSize: 11, color: _textSecondary),
+                  style: pw.TextStyle(fontSize: 10, color: _textSecondary),
                 ),
               ],
             ),
             pw.Container(
               padding: const pw.EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 6,
+                horizontal: 10,
+                vertical: 5,
               ),
               decoration: pw.BoxDecoration(
                 color: _primaryColor,
-                borderRadius: pw.BorderRadius.circular(8),
+                borderRadius: pw.BorderRadius.circular(6),
               ),
               child: pw.Text(
-                '${_dateShort(data.startDate)} – ${_dateShort(data.endDate)}',
+                '${_dateShort(data.startDate)} - ${_dateShort(data.endDate)}',
                 style: pw.TextStyle(
                   color: PdfColors.white,
-                  fontSize: 10,
+                  fontSize: 9,
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
             ),
           ],
         ),
-        pw.SizedBox(height: 8),
-        pw.Divider(color: _borderColor, thickness: 1),
+        pw.SizedBox(height: 6),
+        pw.Divider(color: _borderColor, thickness: 0.75),
       ],
     );
   }
@@ -173,18 +200,18 @@ class ReportPdfService {
   static pw.Widget _buildFooter(pw.Context ctx) {
     return pw.Column(
       children: [
-        pw.Divider(color: _borderColor, thickness: 1),
+        pw.Divider(color: _borderColor, thickness: 0.75),
         pw.SizedBox(height: 4),
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
             pw.Text(
               'Digenerate oleh Presensia - ${_dateShort(DateTime.now())}',
-              style: pw.TextStyle(fontSize: 8, color: _textSecondary),
+              style: pw.TextStyle(fontSize: 7.5, color: _textSecondary),
             ),
             pw.Text(
               'Halaman ${ctx.pageNumber} dari ${ctx.pagesCount}',
-              style: pw.TextStyle(fontSize: 8, color: _textSecondary),
+              style: pw.TextStyle(fontSize: 7.5, color: _textSecondary),
             ),
           ],
         ),
@@ -196,18 +223,18 @@ class ReportPdfService {
 
   static pw.Widget _buildEmployeeCard(ReportPdfData data) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(16),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: pw.BoxDecoration(
         color: _bgColor,
-        borderRadius: pw.BorderRadius.circular(10),
+        borderRadius: pw.BorderRadius.circular(8),
         border: pw.Border.all(color: _borderColor),
       ),
       child: pw.Row(
         children: [
           // Avatar circle
           pw.Container(
-            width: 48,
-            height: 48,
+            width: 36,
+            height: 36,
             decoration: pw.BoxDecoration(
               color: _primaryColor,
               shape: pw.BoxShape.circle,
@@ -219,37 +246,37 @@ class ReportPdfService {
                   : '?',
               style: pw.TextStyle(
                 color: PdfColors.white,
-                fontSize: 22,
+                fontSize: 16,
                 fontWeight: pw.FontWeight.bold,
               ),
             ),
           ),
-          pw.SizedBox(width: 14),
+          pw.SizedBox(width: 10),
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
                 data.employeeName,
                 style: pw.TextStyle(
-                  fontSize: 14,
+                  fontSize: 12,
                   fontWeight: pw.FontWeight.bold,
                   color: _textPrimary,
                 ),
               ),
-              pw.SizedBox(height: 3),
+              pw.SizedBox(height: 2),
               pw.Text(
                 data.employeeEmail,
-                style: pw.TextStyle(fontSize: 10, color: _textSecondary),
+                style: pw.TextStyle(fontSize: 9, color: _textSecondary),
               ),
               if (data.department != null || data.position != null)
-                pw.SizedBox(height: 2),
+                pw.SizedBox(height: 1),
               if (data.department != null || data.position != null)
                 pw.Text(
                   [
                     data.position,
                     data.department,
-                  ].where((e) => e != null).join(' • '),
-                  style: pw.TextStyle(fontSize: 10, color: _textSecondary),
+                  ].where((e) => e != null).join(' | '),
+                  style: pw.TextStyle(fontSize: 9, color: _textSecondary),
                 ),
             ],
           ),
@@ -258,14 +285,14 @@ class ReportPdfService {
     );
   }
 
-  // ── Stats grid 2x3 ────────────────────────────────────────────────────────
+  // ── Stats grid 3x2 ────────────────────────────────────────────────────────
 
   static pw.Widget _buildStatsGrid(ReportPdfData data) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _sectionTitle('Statistik Periode'),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 6),
         pw.Row(
           children: [
             pw.Expanded(
@@ -279,21 +306,10 @@ class ReportPdfService {
             pw.SizedBox(width: 8),
             pw.Expanded(
               child: _statCard(
-                label: 'Total Jam Kerja',
-                value: data.totalWorkLabel,
-                sub: 'dari tracker',
-                color: _primaryColor,
-              ),
-            ),
-            pw.SizedBox(width: 8),
-            pw.Expanded(
-              child: _statCard(
-                label: 'Ketepatan Waktu',
-                value: '${data.punctualityPct.toStringAsFixed(0)}%',
-                sub: '${data.onTimeCount} dari ${data.daysWithCheckIn} hari',
-                color: data.punctualityPct >= 80
-                    ? _successColor
-                    : _warningColor,
+                label: 'Tidak Hadir',
+                value: '${data.missingDays}',
+                sub: 'hari tanpa absensi',
+                color: _errorColor,
               ),
             ),
           ],
@@ -303,10 +319,10 @@ class ReportPdfService {
           children: [
             pw.Expanded(
               child: _statCard(
-                label: 'Tidak Hadir',
-                value: '${data.missingDays}',
-                sub: 'hari tanpa absensi',
-                color: _errorColor,
+                label: 'Total Jam Kerja',
+                value: data.totalWorkLabel,
+                sub: 'dari tracker',
+                color: _primaryColor,
               ),
             ),
             pw.SizedBox(width: 8),
@@ -316,6 +332,19 @@ class ReportPdfService {
                 value: data.avgWorkLabel,
                 sub: 'per hari hadir',
                 color: _primaryColor,
+              ),
+            ),
+          ],
+        ),
+        pw.SizedBox(height: 8),
+        pw.Row(
+          children: [
+            pw.Expanded(
+              child: _statCard(
+                label: 'Ketepatan Waktu',
+                value: '${data.punctualityPct.toStringAsFixed(0)}%',
+                sub: '${data.onTimeCount} dari ${data.daysWithCheckIn} hari',
+                color: data.punctualityPct >= 80 ? _successColor : _warningColor,
               ),
             ),
             pw.SizedBox(width: 8),
@@ -340,7 +369,7 @@ class ReportPdfService {
     required PdfColor color,
   }) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(12),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: pw.BoxDecoration(
         color: PdfColors.white,
         borderRadius: pw.BorderRadius.circular(8),
@@ -351,19 +380,19 @@ class ReportPdfService {
         children: [
           pw.Text(
             label,
-            style: pw.TextStyle(fontSize: 9, color: _textSecondary),
+            style: pw.TextStyle(fontSize: 8, color: _textSecondary),
           ),
-          pw.SizedBox(height: 6),
+          pw.SizedBox(height: 4),
           pw.Text(
             value,
             style: pw.TextStyle(
-              fontSize: 20,
+              fontSize: 15,
               fontWeight: pw.FontWeight.bold,
               color: color,
             ),
           ),
-          pw.SizedBox(height: 2),
-          pw.Text(sub, style: pw.TextStyle(fontSize: 8, color: _textSecondary)),
+          pw.SizedBox(height: 1),
+          pw.Text(sub, style: pw.TextStyle(fontSize: 7, color: _textSecondary)),
         ],
       ),
     );
@@ -380,9 +409,9 @@ class ReportPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _sectionTitle('Distribusi Kehadiran'),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 6),
         pw.Container(
-          padding: const pw.EdgeInsets.all(14),
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: pw.BoxDecoration(
             color: PdfColors.white,
             borderRadius: pw.BorderRadius.circular(8),
@@ -391,9 +420,9 @@ class ReportPdfService {
           child: pw.Column(
             children: [
               _distRow('Hadir', data.presentDays, total, _successColor),
-              pw.SizedBox(height: 8),
+              pw.SizedBox(height: 6),
               _distRow('Tidak Hadir', data.missingDays, total, _errorColor),
-              pw.SizedBox(height: 8),
+              pw.SizedBox(height: 6),
               _distRow('Hari Libur', data.offDays, total, _warningColor),
             ],
           ),
@@ -409,45 +438,44 @@ class ReportPdfService {
     PdfColor color,
   ) {
     final ratio = (count / total).clamp(0.0, 1.0);
-    // Total bar width available after label (80) and caption (~80) = ~360pt on A4
-    const barWidth = 200.0;
+    const barWidth = 100.0;
     final filledWidth = barWidth * ratio;
     final emptyWidth = barWidth - filledWidth;
 
     return pw.Row(
       children: [
         pw.SizedBox(
-          width: 80,
+          width: 60,
           child: pw.Text(
             label,
-            style: pw.TextStyle(fontSize: 10, color: _textPrimary),
+            style: pw.TextStyle(fontSize: 9, color: _textPrimary),
           ),
         ),
-        pw.SizedBox(width: 8),
+        pw.SizedBox(width: 6),
         // filled portion
         if (filledWidth > 0)
           pw.Container(
             width: filledWidth,
-            height: 10,
+            height: 7,
             decoration: pw.BoxDecoration(
               color: color,
-              borderRadius: pw.BorderRadius.circular(5),
+              borderRadius: pw.BorderRadius.circular(3.5),
             ),
           ),
         // empty remainder
         if (emptyWidth > 0)
           pw.Container(
             width: emptyWidth,
-            height: 10,
+            height: 7,
             decoration: pw.BoxDecoration(
               color: _bgColor,
-              borderRadius: pw.BorderRadius.circular(5),
+              borderRadius: pw.BorderRadius.circular(3.5),
             ),
           ),
-        pw.SizedBox(width: 8),
+        pw.SizedBox(width: 6),
         pw.Text(
           '$count hari (${(ratio * 100).toStringAsFixed(0)}%)',
-          style: pw.TextStyle(fontSize: 9, color: _textSecondary),
+          style: pw.TextStyle(fontSize: 8, color: _textSecondary),
         ),
       ],
     );
@@ -468,9 +496,9 @@ class ReportPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _sectionTitle('Jam Kerja per Periode'),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 6),
         pw.Container(
-          padding: const pw.EdgeInsets.all(14),
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: pw.BoxDecoration(
             color: PdfColors.white,
             borderRadius: pw.BorderRadius.circular(8),
@@ -479,7 +507,7 @@ class ReportPdfService {
           child: pw.Column(
             children: [
               pw.SizedBox(
-                height: 100,
+                height: 80,
                 child: pw.Row(
                   crossAxisAlignment: pw.CrossAxisAlignment.end,
                   mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
@@ -509,7 +537,7 @@ class ReportPdfService {
                               ),
                             pw.SizedBox(height: 2),
                             pw.Container(
-                              height: 80 * heightRatio,
+                              height: 60 * heightRatio,
                               decoration: pw.BoxDecoration(
                                 color: isPeak
                                     ? _primaryColor
@@ -527,16 +555,16 @@ class ReportPdfService {
                   }).toList(),
                 ),
               ),
-              pw.SizedBox(height: 6),
+              pw.SizedBox(height: 4),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceEvenly,
                 children: data.buckets.map((bucket) {
                   return pw.Expanded(
                     child: pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 3),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 2),
                       child: pw.Text(
                         _bucketLabel(bucket.start, bucket.end),
-                        style: pw.TextStyle(fontSize: 7, color: _textSecondary),
+                        style: pw.TextStyle(fontSize: 6.5, color: _textSecondary),
                         textAlign: pw.TextAlign.center,
                       ),
                     ),
@@ -575,7 +603,7 @@ class ReportPdfService {
 
     if (data.punctualityPct >= 90) {
       insights.add(
-        'Ketepatan waktu sangat baik: ${data.punctualityPct.toStringAsFixed(0)}% check-in sebelum 08:15.',
+        'Ketepatan waktu sangat baik: ${data.punctualityPct.toStringAsFixed(0)}% check-in tepat waktu.',
       );
     } else if (data.punctualityPct > 0) {
       insights.add(
@@ -599,9 +627,9 @@ class ReportPdfService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _sectionTitle('Insight'),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 6),
         pw.Container(
-          padding: const pw.EdgeInsets.all(14),
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: pw.BoxDecoration(
             color: PdfColors.white,
             borderRadius: pw.BorderRadius.circular(8),
@@ -612,14 +640,14 @@ class ReportPdfService {
             children: insights
                 .map(
                   (insight) => pw.Padding(
-                    padding: const pw.EdgeInsets.only(bottom: 6),
+                    padding: const pw.EdgeInsets.only(bottom: 4),
                     child: pw.Row(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
                         pw.Container(
-                          width: 6,
-                          height: 6,
-                          margin: const pw.EdgeInsets.only(top: 3, right: 8),
+                          width: 4,
+                          height: 4,
+                          margin: const pw.EdgeInsets.only(top: 3.5, right: 6),
                           decoration: pw.BoxDecoration(
                             color: _primaryColor,
                             shape: pw.BoxShape.circle,
@@ -629,9 +657,9 @@ class ReportPdfService {
                           child: pw.Text(
                             insight,
                             style: pw.TextStyle(
-                              fontSize: 10,
+                              fontSize: 8.5,
                               color: _textPrimary,
-                              lineSpacing: 2,
+                              lineSpacing: 1.5,
                             ),
                           ),
                         ),
@@ -652,7 +680,7 @@ class ReportPdfService {
     return pw.Text(
       title,
       style: pw.TextStyle(
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: pw.FontWeight.bold,
         color: _textPrimary,
       ),

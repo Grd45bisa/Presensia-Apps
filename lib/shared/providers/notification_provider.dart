@@ -269,6 +269,7 @@ class NotificationProvider extends ChangeNotifier {
     for (final n in items) {
       if (_pushedToOs.contains(n.id)) continue;
       if (n.priority == NotificationPriority.low) continue;
+      if (n.category == NotificationCategory.calendar) continue;
 
       final channel = switch (n.category) {
         NotificationCategory.attendance => NotifChannel.attendance,
