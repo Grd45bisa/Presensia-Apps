@@ -57,6 +57,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   WorkShift? _selectedShift;
   ScheduleValidationResult? _pendingScheduleValidation;
   GeofenceValidationResult? _pendingGeofenceValidation;
+  DateTime? _lastGeofenceCheckAt;
   bool _scheduleLoading = true;
   String? _scheduleMessage;
   bool _checkingGeofence = false;
@@ -80,6 +81,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     unawaited(FaceRecognitionService.instance.init());
   }
 
+  @override
+  void didUpdateWidget(covariant AttendanceScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _prepareLocationAccess();
+    }
+  }
+
   Future<void> _prepareLocationAccess() async {
     setState(() {
       _preparingLocation = true;
@@ -87,12 +96,24 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     });
 
     try {
-      await AttendanceGeofenceService.instance.prepareLocationAccess();
-      if (!mounted) return;
-      setState(() {
-        _locationReady = true;
-        _locationMessage = 'GPS siap untuk validasi presensi.';
-      });
+      final uid = AuthService.instance.currentUserId;
+      if (uid != null) {
+        final validation = await AttendanceGeofenceService.instance.validate(uid, allowCached: false);
+        if (!mounted) return;
+        setState(() {
+          _pendingGeofenceValidation = validation;
+          _lastGeofenceCheckAt = DateTime.now();
+          _locationReady = true;
+          _locationMessage = null;
+        });
+      } else {
+        await AttendanceGeofenceService.instance.prepareLocationAccess();
+        if (!mounted) return;
+        setState(() {
+          _locationReady = true;
+          _locationMessage = null;
+        });
+      }
     } on GeofencePermissionException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -106,7 +127,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _locationMessage = 'GPS belum siap. Aktifkan lokasi sebelum presensi.';
       });
     } finally {
-      if (mounted) setState(() => _preparingLocation = false);
+      if (mounted) {
+        setState(() {
+          _preparingLocation = false;
+          _checkingGeofence = false;
+        });
+      }
     }
   }
 
@@ -452,7 +478,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             : 'Pilih shift sebelum mulai presensi.',
         color: AppColors.primary,
         child: DropdownButtonFormField<String>(
-          initialValue: _selectedShift?.id,
+          value: _selectedShift?.id,
           isExpanded: true,
           decoration: InputDecoration(
             isDense: true,
@@ -666,7 +692,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     if (_preparingLocation) {
       return (
         Icons.location_searching_rounded,
-        'Menyiapkan GPS untuk presensi...',
+        'Memeriksa lokasi...',
         AppColors.primary,
         AppColors.primaryLight,
       );
@@ -721,6 +747,27 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         AppColors.errorLight,
       );
     }
+    final validation = _pendingGeofenceValidation;
+    if (validation != null) {
+      if (!validation.allowed) {
+        return (
+          Icons.location_off_rounded,
+          _geofenceFailureMessage(validation),
+          AppColors.error,
+          AppColors.errorLight,
+        );
+      } else {
+        return (
+          Icons.face_rounded,
+          _devSettings.requireBlinkForAttendance
+              ? 'Lokasi sesuai. Tekan presensi, kedipkan mata, lalu tatap lurus.'
+              : 'Lokasi sesuai. Tekan presensi, lalu tatap lurus.',
+          AppColors.success,
+          AppColors.successLight,
+        );
+      }
+    }
+
     return (
       Icons.face_rounded,
       _locationReady
@@ -773,7 +820,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           _processing
               ? 'Menyimpan...'
               : _preparingLocation
-              ? 'Menyiapkan GPS...'
+              ? 'Memeriksa lokasi...'
               : _checkingGeofence
               ? 'Cek lokasi...'
               : label,
@@ -894,6 +941,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final uid = AuthService.instance.currentUserId;
     if (uid == null) return null;
 
+    final existingValidation = _pendingGeofenceValidation;
+    final lastCheck = _lastGeofenceCheckAt;
+    if (existingValidation != null &&
+        existingValidation.allowed &&
+        lastCheck != null &&
+        DateTime.now().difference(lastCheck).inSeconds < 60) {
+      return existingValidation;
+    }
+
     setState(() {
       _checkingGeofence = true;
       _matchFailed = false;
@@ -904,6 +960,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
     try {
       final validation = await AttendanceGeofenceService.instance.validate(uid);
+      _lastGeofenceCheckAt = DateTime.now();
+      _pendingGeofenceValidation = validation;
+
       if (validation.allowed) return validation;
 
       _showResult(
@@ -1404,6 +1463,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     ];
     return '${now.day} ${months[now.month - 1]} ${now.year}';
   }
+
 }
 
 class _StoredMatch {

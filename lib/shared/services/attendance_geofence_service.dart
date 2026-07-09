@@ -23,8 +23,8 @@ class AttendanceGeofenceService {
     await _currentPosition(allowCached: true);
   }
 
-  Future<GeofenceValidationResult> validate(String employeeId) async {
-    final position = await _currentPosition(allowCached: false);
+  Future<GeofenceValidationResult> validate(String employeeId, {bool allowCached = false}) async {
+    final position = await _currentPosition(allowCached: allowCached);
     final uri = Uri.parse('$_baseUrl/api/mobile/attendance/validate-geofence');
 
     final response = await http
@@ -94,7 +94,7 @@ class AttendanceGeofenceService {
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.best,
+          accuracy: LocationAccuracy.high,
           timeLimit: Duration(seconds: 15),
         ),
       );
