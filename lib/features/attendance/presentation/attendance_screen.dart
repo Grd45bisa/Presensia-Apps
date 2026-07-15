@@ -98,7 +98,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     try {
       final uid = AuthService.instance.currentUserId;
       if (uid != null) {
-        final validation = await AttendanceGeofenceService.instance.validate(uid, allowCached: false);
+        final validation = await AttendanceGeofenceService.instance.validate(
+          uid,
+          allowCached: false,
+        );
         if (!mounted) return;
         setState(() {
           _pendingGeofenceValidation = validation;
@@ -478,7 +481,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             : 'Pilih shift sebelum mulai presensi.',
         color: AppColors.primary,
         child: DropdownButtonFormField<String>(
-          value: _selectedShift?.id,
+          initialValue: _selectedShift?.id,
           isExpanded: true,
           decoration: InputDecoration(
             isDense: true,
@@ -1463,7 +1466,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     ];
     return '${now.day} ${months[now.month - 1]} ${now.year}';
   }
-
 }
 
 class _StoredMatch {
