@@ -13,7 +13,7 @@ class AttendanceGeofenceService {
 
   static const String _baseUrl = String.fromEnvironment(
     'PRESENSIA_BACKEND_URL',
-    defaultValue: 'https://apipre.kitapunya.web.id',
+    defaultValue: 'https://apipre.kitaundang.my.id',
   );
 
   Position? _cachedPosition;
